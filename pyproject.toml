@@ -1,0 +1,19 @@
+[project]
+name = "phyanim"
+version = "0.1.0"
+description = "Physics-first animation modeling MVP."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "sympy",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["phyanim*"]
+exclude = ["outputs*", "examples*", "tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,131 @@
+{
+  "scene": {
+    "dimension": 2,
+    "time_symbol": "t"
+  },
+  "objects": [
+    {
+      "id": "particle",
+      "type": "point_particle",
+      "parameters": {
+        "m": {
+          "value": 1.0,
+          "unit": "kg"
+        },
+        "q": {
+          "value": 1.0,
+          "unit": "C"
+        }
+      },
+      "state_variables": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ]
+    }
+  ],
+  "initial_keyframe": {
+    "time": 0.0,
+    "object_states": {
+      "particle": {
+        "x": -2.0,
+        "y": 0.0,
+        "vx": 1.0,
+        "vy": 0.0
+      }
+    }
+  },
+  "segments": [
+    {
+      "id": "seg1_free",
+      "description": "从x=-2匀速运动到磁场边界x=0",
+      "object_ids": [
+        "particle"
+      ],
+      "state_vector": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ],
+      "equations": {
+        "x_dot": "vx",
+        "y_dot": "vy",
+        "vx_dot": "0",
+        "vy_dot": "0"
+      },
+      "parameters": {},
+      "end_condition": {
+        "type": "event",
+        "condition": "x >= 0"
+      }
+    },
+    {
+      "id": "seg2_magnetic",
+      "description": "在磁场内受洛伦兹力做圆周运动，直到离开磁场（x<0）",
+      "object_ids": [
+        "particle"
+      ],
+      "state_vector": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ],
+      "equations": {
+        "x_dot": "vx",
+        "y_dot": "vy",
+        "vx_dot": "-q*B/m * vy",
+        "vy_dot": "q*B/m * vx"
+      },
+      "parameters": {
+        "B": {
+          "value": 1.0,
+          "unit": "T"
+        }
+      },
+      "end_condition": {
+        "type": "event",
+        "condition": "x < 0"
+      }
+    },
+    {
+      "id": "seg3_free2",
+      "description": "离开磁场后继续匀速直线运动",
+      "object_ids": [
+        "particle"
+      ],
+      "state_vector": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ],
+      "equations": {
+        "x_dot": "vx",
+        "y_dot": "vy",
+        "vx_dot": "0",
+        "vy_dot": "0"
+      },
+      "parameters": {},
+      "end_condition": {
+        "type": "duration",
+        "value": 5.0
+      }
+    }
+  ],
+  "render": {
+    "objects": [
+      {
+        "object_id": "particle",
+        "geometry": "circle",
+        "position_mapping": [
+          "x",
+          "y"
+        ],
+        "show_trace": true
+      }
+    ]
+  }
+}

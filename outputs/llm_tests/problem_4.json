@@ -1,0 +1,139 @@
+{
+  "scene": {
+    "dimension": 2,
+    "time_symbol": "t"
+  },
+  "objects": [
+    {
+      "id": "particle",
+      "type": "point_particle",
+      "parameters": {
+        "m": {
+          "value": 1.0,
+          "unit": "kg"
+        },
+        "q": {
+          "value": 1.0,
+          "unit": "C"
+        }
+      },
+      "state_variables": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ]
+    }
+  ],
+  "initial_keyframe": {
+    "time": 0.0,
+    "object_states": {
+      "particle": {
+        "x": 0.0,
+        "y": 0.0,
+        "vx": 0.0,
+        "vy": 0.0
+      }
+    }
+  },
+  "segments": [
+    {
+      "id": "elec",
+      "description": "电场加速阶段",
+      "type": "ode",
+      "object_ids": [
+        "particle"
+      ],
+      "state_vector": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ],
+      "equations": {
+        "x_dot": "vx",
+        "y_dot": "vy",
+        "vx_dot": "q*E/m",
+        "vy_dot": "0"
+      },
+      "parameters": {
+        "E": {
+          "value": 1.0,
+          "unit": "N/C"
+        }
+      },
+      "end_condition": {
+        "type": "duration",
+        "value": 1.0
+      }
+    },
+    {
+      "id": "magn",
+      "description": "磁场偏转阶段",
+      "type": "ode",
+      "object_ids": [
+        "particle"
+      ],
+      "state_vector": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ],
+      "equations": {
+        "x_dot": "vx",
+        "y_dot": "vy",
+        "vx_dot": "q*B*vy/m",
+        "vy_dot": "-q*B*vx/m"
+      },
+      "parameters": {
+        "B": {
+          "value": 1.0,
+          "unit": "T"
+        }
+      },
+      "end_condition": {
+        "type": "duration",
+        "value": 1.57
+      }
+    },
+    {
+      "id": "free",
+      "description": "离开磁场后自由运动阶段",
+      "type": "ode",
+      "object_ids": [
+        "particle"
+      ],
+      "state_vector": [
+        "x",
+        "y",
+        "vx",
+        "vy"
+      ],
+      "equations": {
+        "x_dot": "vx",
+        "y_dot": "vy",
+        "vx_dot": "0",
+        "vy_dot": "0"
+      },
+      "parameters": {},
+      "end_condition": {
+        "type": "duration",
+        "value": 2.0
+      }
+    }
+  ],
+  "render": {
+    "objects": [
+      {
+        "object_id": "particle",
+        "geometry": "circle",
+        "position_mapping": [
+          "x",
+          "y"
+        ],
+        "show_trace": true
+      }
+    ]
+  }
+}

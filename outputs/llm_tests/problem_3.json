@@ -1,0 +1,175 @@
+{
+  "scene": {
+    "dimension": 2,
+    "time_symbol": "t"
+  },
+  "objects": [
+    {
+      "id": "car1",
+      "type": "point_particle",
+      "parameters": {
+        "m": {
+          "value": 1.0,
+          "unit": "kg"
+        }
+      },
+      "state_variables": [
+        "x1",
+        "y1",
+        "vx1",
+        "vy1"
+      ]
+    },
+    {
+      "id": "car2",
+      "type": "point_particle",
+      "parameters": {
+        "m": {
+          "value": 2.0,
+          "unit": "kg"
+        }
+      },
+      "state_variables": [
+        "x2",
+        "y2",
+        "vx2",
+        "vy2"
+      ]
+    }
+  ],
+  "initial_keyframe": {
+    "time": 0.0,
+    "object_states": {
+      "car1": {
+        "x1": 0.0,
+        "y1": 0.0,
+        "vx1": 2.0,
+        "vy1": 0.0
+      },
+      "car2": {
+        "x2": 10.0,
+        "y2": 0.0,
+        "vx2": -3.0,
+        "vy2": 0.0
+      }
+    }
+  },
+  "segments": [
+    {
+      "id": "pre_collision",
+      "description": "碰撞前匀速运动阶段",
+      "type": "ode",
+      "object_ids": [
+        "car1",
+        "car2"
+      ],
+      "state_vector": [
+        "x1",
+        "y1",
+        "vx1",
+        "vy1",
+        "x2",
+        "y2",
+        "vx2",
+        "vy2"
+      ],
+      "equations": {
+        "x1_dot": "vx1",
+        "y1_dot": "vy1",
+        "vx1_dot": "0",
+        "vy1_dot": "0",
+        "x2_dot": "vx2",
+        "y2_dot": "vy2",
+        "vx2_dot": "0",
+        "vy2_dot": "0"
+      },
+      "parameters": {},
+      "end_condition": {
+        "type": "event",
+        "detect": {
+          "expression": "x1 - x2",
+          "crossing": "zero"
+        }
+      }
+    },
+    {
+      "id": "collision",
+      "description": "碰撞瞬间状态跃迁",
+      "type": "transition",
+      "object_ids": [
+        "car1",
+        "car2"
+      ],
+      "transition": {
+        "car1": {
+          "x1": "x1",
+          "y1": "y1",
+          "vx1": "((1-2)/(1+2))*vx1 + (2*2/(1+2))*vx2",
+          "vy1": "vy1"
+        },
+        "car2": {
+          "x2": "x2",
+          "y2": "y2",
+          "vx2": "((2*1)/(1+2))*vx1 + ((2-1)/(1+2))*vx2",
+          "vy2": "vy2"
+        }
+      }
+    },
+    {
+      "id": "post_collision",
+      "description": "碰撞后匀速运动阶段",
+      "type": "ode",
+      "object_ids": [
+        "car1",
+        "car2"
+      ],
+      "state_vector": [
+        "x1",
+        "y1",
+        "vx1",
+        "vy1",
+        "x2",
+        "y2",
+        "vx2",
+        "vy2"
+      ],
+      "equations": {
+        "x1_dot": "vx1",
+        "y1_dot": "vy1",
+        "vx1_dot": "0",
+        "vy1_dot": "0",
+        "x2_dot": "vx2",
+        "y2_dot": "vy2",
+        "vx2_dot": "0",
+        "vy2_dot": "0"
+      },
+      "parameters": {},
+      "end_condition": {
+        "type": "duration",
+        "value": 10.0
+      }
+    }
+  ],
+  "render": {
+    "objects": [
+      {
+        "object_id": "car1",
+        "geometry": "circle",
+        "position_mapping": [
+          "x1",
+          "y1"
+        ],
+        "show_trace": true
+      },
+      {
+        "object_id": "car2",
+        "geometry": "circle",
+        "position_mapping": [
+          "x2",
+          "y2"
+        ],
+        "show_trace": true
+      }
+    ]
+  }
+}
