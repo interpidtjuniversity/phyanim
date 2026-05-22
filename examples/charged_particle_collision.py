@@ -22,11 +22,16 @@ if __name__ == "__main__":
     collision_event = PhysicsEvent("collision_event", condition=EventCondition(expression="xA - xB", terminal=True, direction=1), transition=StateTransition(name="collision_impulse", equations={"vxA": "vxB", "vxB": "vxA"}))
     
     state_vector=["xA", "xB", "vxA", "vxB"]
+    # equations可能不同段不同
     state_equations={
         "xA": "vxA",
         "xB": "vxB",
         "vxA": "E*qA/mA",
         "vxB": "E*qB/mB",
+    }
+    drived_equations={
+        "vxAminusOne": "vxA - 2",
+        "vxBplusOne": "vxB + 2",
     }
     # 这个必须公用同一套
     state_owners={
@@ -37,26 +42,28 @@ if __name__ == "__main__":
     }
     animation.add_segment(
         PhysicsSegment(
-            segment_id="before_collision",
+            segment_id="before_collision1",
             object_ids=["particleA", "particleB"],
             state_vector=state_vector,
             equations=state_equations,
+            derived_equations=drived_equations,
             state_owners=state_owners,
             duration=100,
         ),
         end_event=collision_event,
     )
-    # animation.add_segment(
-    #     PhysicsSegment(
-    #         segment_id="before_collision",
-    #         object_ids=["particleA", "particleB"],
-    #         state_vector=state_vector,
-    #         equations=state_equations,
-    #         state_owners=state_owners,
-    #         duration=100,
-    #     ),
-    #     end_event=collision_event,
-    # )
+    animation.add_segment(
+        PhysicsSegment(
+            segment_id="before_collision2",
+            object_ids=["particleA", "particleB"],
+            state_vector=state_vector,
+            equations=state_equations,
+            derived_equations=drived_equations,
+            state_owners=state_owners,
+            duration=100,
+        ),
+        end_event=collision_event,
+    )
     # animation.add_segment(
     #     PhysicsSegment(
     #         segment_id="before_collision",
@@ -74,14 +81,19 @@ if __name__ == "__main__":
             object_ids=["particleA", "particleB"],
             state_vector=state_vector,
             equations=state_equations,
+            derived_equations=drived_equations,
             state_owners=state_owners,
             duration=100,
         ),
         end_event=time_countdown_event(3),
     )
     animation.solve(ScipySegmentSolver(sample_dt=1/20))
-    exporter = TimelineExporter()
-    exporter.plot_variables(animation, show=True)
+    # exporter = TimelineExporter()
+    # exporter.plot_variables(animation, show=True)
+
+    drived_functions = animation.build_derived_functions()
+    print(drived_functions["before_collision1"]["vxAminusOne"](0))
+    print(drived_functions["before_collision1"]["vxBplusOne"](0))
     # output_path = Path("phyanim/outputs/mytest.json")
     # exporter = TimelineExporter()
     # TimelineExporter().write_json(animation, output_path)

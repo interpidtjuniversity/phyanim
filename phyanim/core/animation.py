@@ -177,6 +177,49 @@ class PhysicsAnimation:
             
         return functions
 
+    def build_derived_functions(
+        self, *, clamp: bool = True
+    ) -> dict[str, dict[str, InterpolatedStateFunction]]:
+        """Return segment -> derived_name -> f(time) lookup functions.
+        
+        Derived variables have no object ownership.
+        Variables absent from a segment are carried over as constants
+        from the last segment that computed them.
+        """
+        # 收集所有 segment 里出现过的派生量名称
+        all_derived_names: set[str] = set()
+        for trajectory in self.trajectories:
+            all_derived_names.update(trajectory.derived.keys())
+
+        functions: dict[str, dict[str, InterpolatedStateFunction]] = {}
+        # 记录每个派生量最后一次被计算到的值，用于后续 segment 的常值继承
+        last_known: dict[str, float] = {}
+
+        for trajectory in self.trajectories:
+            t_start = trajectory.times[0]
+            t_end = trajectory.times[-1]
+            seg_functions: dict[str, InterpolatedStateFunction] = {}
+
+            for name in all_derived_names:
+                if name in trajectory.derived:
+                    seg_functions[name] = trajectory.derived_function(name, clamp=clamp)
+                    # 更新最后已知值为本段末尾值
+                    last_known[name] = trajectory.derived[name][-1]
+                elif name in last_known:
+                    seg_functions[name] = InterpolatedStateFunction(
+                        times=(t_start, t_end),
+                        values=(last_known[name], last_known[name]),
+                    )
+                else:
+                    raise ValueError(
+                        f"Segment '{trajectory.segment_id}': derived variable '{name}' "
+                        f"has no value in this trajectory or any prior segment."
+                    )
+
+            functions[trajectory.segment_id] = seg_functions
+
+        return functions
+
     # previous_keyframe是全量的，segment_keyframe可能不全量，需要合并
     def _merge_keyframe_states(
         self,
