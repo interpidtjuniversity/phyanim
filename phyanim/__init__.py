@@ -1,7 +1,7 @@
 """Physics-first animation modeling toolkit."""
 
 from phyanim.core.animation import PhysicsAnimation
-from phyanim.core.events import EventCondition, PhysicsEvent, StateTransition, time_end_event
+from phyanim.core.events import EventCondition, PhysicsEvent, StateTransition, time_end_event, time_countdown_event
 from phyanim.core.keyframe import PhysicsKeyFrame
 from phyanim.core.objects import PhysicObject, PointParticle
 from phyanim.core.segment import PhysicsSegment
@@ -25,4 +25,5 @@ __all__ = [
     "StateTransition",
     "StateVariable",
     "time_end_event",
+    "time_countdown_event",
 ]

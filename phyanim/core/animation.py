@@ -77,13 +77,15 @@ class PhysicsAnimation:
                 f"Segment '{segment.segment_id}' parameters duplicate global parameters: "
                 f"{sorted(duplicate_segment_parameters)}"
             )
-        if not end_event.condition.terminal:
+                # 有状态转移的事件必须是终端事件，应用状态转移函数后开启新的段
+        if end_event.transition is None or not end_event.condition.terminal:
             raise ValueError(
-                f"Segment end event '{end_event.name}' must be terminal."
+                f"Event '{end_event.name}' must be terminal and has a state transition."
             )
         self.segments.append(segment)
         self.segment_end_events.append(end_event)
 
+    # initial_keyframe必须包含所有状态变量的初始值（必须强行保证，否则可能造成数据丢失）
     def solve(self, solver: ScipySegmentSolver | None = None) -> list[Trajectory]:
         if self.initial_keyframe is None:
             raise ValueError("PhysicsAnimation requires an initial keyframe before solving.")
@@ -102,7 +104,7 @@ class PhysicsAnimation:
             result = solver.solve(segment, current_keyframe, parameters, end_event=end_event)
             self.segment_results.append(result)
             self.trajectories.append(result.trajectory)
-            # 段结束帧
+            # 段结束帧来自从y的解码值，状态可能补全因此需要和前一帧进行合并
             end_keyframe = self._merge_keyframe_states(current_keyframe, result.end_keyframe)
             self.keyframes.append(end_keyframe)
             # 段状态转移
@@ -143,52 +145,39 @@ class PhysicsAnimation:
             parameters.update(object_parameters)
         return parameters
 
-    def build_solution_state_functions(
-        self,
-    ) -> dict[str, dict[str, dict[str, StateFunction]]]:
-        """Return segment -> object -> state -> dense f(time) functions when available."""
-
-        functions: dict[str, dict[str, dict[str, StateFunction]]] = {}
-        for result in self.segment_results:
-            segment_functions = functions.setdefault(result.solution.segment_id, {})
-            for object_id in result.solution.object_ids:
-                segment_functions[object_id] = {
-                    name: function
-                    for name, function in result.solution.state_functions.items()
-                    if result.solution.state_owners[name] == object_id
-                }
-        return functions
-
     def build_state_functions(
         self, *, clamp: bool = True
     ) -> dict[str, dict[str, dict[str, InterpolatedStateFunction]]]:
         """Return segment -> object -> state -> f(time) lookup functions."""
-
         functions: dict[str, dict[str, dict[str, InterpolatedStateFunction]]] = {}
-        for trajectory in self.trajectories:
+        for i, trajectory in enumerate(self.trajectories):
+            start_keyframe = self.keyframes[2 * i]
+            t_start = trajectory.times[0]
+            t_end = trajectory.times[-1]
             segment_functions = functions.setdefault(trajectory.segment_id, {})
-            if trajectory.object_states:
-                for object_id, states in trajectory.object_states.items():
-                    segment_functions[object_id] = {
-                        name: trajectory.state_function(name, clamp=clamp)
-                        for name in states
-                    }
-            else:
-                raise ValueError("Trajectory is missing object_states.")
+
+            for object_id in self.objects.keys():
+                obj_functions: dict[str, InterpolatedStateFunction] = {}
+                # 全量的state
+                obj_state = list(self.objects[object_id].state_variables.keys())
+                for state in obj_state:
+                    # 本段有解
+                    if state in trajectory.states:
+                        obj_functions[state] = trajectory.state_function(state, clamp=clamp)
+                    # 本段没有解，从上一帧继承
+                    elif state in start_keyframe.object_states[object_id].keys():
+                        state_value = start_keyframe.object_states[object_id][state]
+                        obj_functions[state] = InterpolatedStateFunction(times=(t_start, t_end), values=(state_value, state_value))
+
+                    else:
+                        raise ValueError(
+                            f"Segment '{trajectory.segment_id}' object '{object_id}' state '{state}' is not found in trajectory or keyframe."
+                        )
+                segment_functions[object_id] = obj_functions
+            
         return functions
 
-    def build_derived_functions(
-        self, *, clamp: bool = True
-    ) -> dict[str, dict[str, dict[str, InterpolatedStateFunction]]]:
-        """Return segment -> object -> derived quantity -> f(time) lookup functions."""
-
-        functions: dict[str, dict[str, dict[str, InterpolatedStateFunction]]] = {}
-        for trajectory in self.trajectories:
-            segment_functions = functions.setdefault(trajectory.segment_id, {})
-            for object_id in trajectory.object_ids:
-                segment_functions[object_id] = trajectory.derived_functions(clamp=clamp)
-        return functions
-
+    # previous_keyframe是全量的，segment_keyframe可能不全量，需要合并
     def _merge_keyframe_states(
         self,
         previous_keyframe: PhysicsKeyFrame,
@@ -198,9 +187,9 @@ class PhysicsAnimation:
             object_id: dict(state)
             for object_id, state in previous_keyframe.object_states.items()
         }
-        # 有些state变了，有些没变
+        # 有些state变了，有些没变，保留该段内未更新的状态变量
         for object_id, state in segment_keyframe.object_states.items():
-            object_states[object_id] = dict(state)
+            object_states.setdefault(object_id, {}).update(state)
         return PhysicsKeyFrame(
             time=segment_keyframe.time,
             object_states=object_states,
@@ -216,12 +205,13 @@ class PhysicsAnimation:
         result: SegmentResult,
         boundary_keyframe: PhysicsKeyFrame,
     ) -> PhysicsKeyFrame:
-        # 没有触发事件，直接返回边界帧
+        # 没有触发事件，报错
         if result.triggered_event is None:
             raise ValueError(
-                    f"Segment '{segment.segment_id}' end_event '{end_event.event_name}' is not triggered, can not use transition."
+                    f"Segment '{segment.segment_id}' end_event '{end_event.name}' is not triggered, can not use transition."
                 )
 
+        # 这里必然保证了是全量状态变量
         flat_state = segment.flatten_keyframe_state(boundary_keyframe.object_states)
         parameters = boundary_keyframe.parameters
         # 事件是段和段之间的边界：所有状态跃迁都发生在下一段开始前。
@@ -233,7 +223,8 @@ class PhysicsAnimation:
             object_id: dict(state)
             for object_id, state in boundary_keyframe.object_states.items()
         }
-        object_states.update(segment.split_state_by_object(flat_state))
+        for object_id, partial_state in segment.split_state_by_object(flat_state).items():
+            object_states.setdefault(object_id, {}).update(partial_state)
         return PhysicsKeyFrame(
             time=boundary_keyframe.time,
             object_states=object_states,

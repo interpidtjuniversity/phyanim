@@ -90,4 +90,12 @@ def time_end_event(name: str = "segment_time_end") -> PhysicsEvent:
     return PhysicsEvent(
         name,
         EventCondition(expression="t - t_end", terminal=True, direction=1),
+        StateTransition(name="segment_time_end_transition", equations={}),
+    )
+
+def time_countdown_event(countdown: int, name: str = "segment_time_countdown") -> PhysicsEvent:
+    return PhysicsEvent(
+        name,
+        EventCondition(expression=f"t - t_start - {countdown}", terminal=True, direction=1),
+        StateTransition(name="segment_time_countdown_transition", equations={}),
     )

@@ -65,12 +65,6 @@ class ScipySegmentSolver:
 
         symbol_names = set(segment.state_vector) | set(parameters) | {"t"}
         event_function = end_event.condition.build_function(symbol_names=symbol_names)
-
-        # 有状态转移的事件必须是终端事件，应用状态转移函数后开启新的段
-        if end_event.transition is None or not end_event.condition.terminal:
-            raise ValueError(
-                f"Event '{end_event.name}' must be terminal and has a state transition."
-            )
         
         def make_event(current_event, current_function):
             def scipy_event(time: float, y: Any) -> float:
