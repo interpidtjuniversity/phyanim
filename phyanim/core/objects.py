@@ -13,6 +13,8 @@ class PhysicObject2D:
     parameters: dict[str, Parameter] = field(default_factory=dict)
     state_variables: dict[str, StateVariable] = field(default_factory=dict)
 
+    cartesian_position: dict[str, str] = field(default_factory=dict)
+
     # 持有一个manim的mobject，用于渲染
     mobject: Mobject | None = None
 
@@ -36,8 +38,14 @@ class PhysicObject2D:
         return {name: parameter.require_value() for name, parameter in self.parameters.items()}
 
     # 该物理对象要参与绘制，所以必须要返回笛卡尔坐标（这个坐标变量可能是它本身的state变量，也可能是全局的derived变量）但总之都得返回x和y到底是什么
-    def cartesian_position_variables(self) -> dict[str, str]:
-        raise NotImplementedError("Subclasses must implement this method.")
+    def cartesian_position_variables(self) -> tuple[str, str]:
+        x_name = self.cartesian_position.get("x")
+        y_name = self.cartesian_position.get("y")
+        if x_name is None or y_name is None:
+            raise ValueError(
+                f"Object '{self.object_id}' must define cartesian_position['x'] and cartesian_position['y']."
+            )
+        return x_name, y_name
 
 @dataclass
 class PointParticle(PhysicObject2D):
@@ -53,6 +61,7 @@ class PointParticle(PhysicObject2D):
         color: str = "red",
         parameter_names: dict[str, str] | None = None,
         state_names: dict[str, str] | None = None,
+        cartesian_position: dict[str, str] | None = None,
     ) -> None:
         parameter_names = parameter_names or {}
         self.state_names = state_names or {}
@@ -66,33 +75,13 @@ class PointParticle(PhysicObject2D):
             parameters[charge_name] = Parameter(charge_name, charge, "C", "charge")
 
         self.states = {}
-        if "x" in state_names:
-            self.states[self.state_names["x"]] = StateVariable(self.state_names["x"], "m", "horizontal position")
-        if "y" in state_names:
-            self.states[self.state_names["y"]] = StateVariable(self.state_names["y"], "m", "vertical position")
-        if "vx" in state_names:
-            self.states[self.state_names["vx"]] = StateVariable(self.state_names["vx"], "m/s", "horizontal velocity")
-        if "vy" in state_names:
-            self.states[self.state_names["vy"]] = StateVariable(self.state_names["vy"], "m/s", "vertical velocity")
-        if "ax" in state_names:
-            self.states[self.state_names["ax"]] = StateVariable(self.state_names["ax"], "m/s^2", "horizontal acceleration")
-        if "ay" in state_names:
-            self.states[self.state_names["ay"]] = StateVariable(self.state_names["ay"], "m/s^2", "vertical acceleration")
+        for key, value in self.state_names.items():
+            self.states[value] = StateVariable(value, "暂无单位", f"{key} state")
 
-        circle = Circle(color=color, radius=radius)
-        self.mobject = circle
-        super().__init__(object_id, parameters, self.states, circle)
-    
-    def cartesian_position_variables(self) -> tuple[str, str]:
-        x_name = self.state_names.get("x")
-        y_name = self.state_names.get("y")
-
-        if x_name is None or y_name is None:
-            raise ValueError(
-                f"PointParticle '{self.object_id}' must define x and y state names."
-            )
-
-        return x_name, y_name
-
-
-
+        super().__init__(
+            object_id=object_id,
+            parameters=parameters,
+            state_variables=self.states,
+            cartesian_position=cartesian_position,
+            mobject=Circle(color=color, radius=radius),
+        )

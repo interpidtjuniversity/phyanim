@@ -94,6 +94,8 @@ class PhyAnimationScene2D(Scene):
         tracker = ValueTracker(0.0)
 
         for obj_id, obj in self.animation.objects.items():
+            if obj.mobject is None:
+                raise ValueError(f"Object '{obj_id}' has no mobject for rendering.")
             self.add(obj.mobject)
 
             def make_updater(current_obj_id: str):
@@ -112,4 +114,5 @@ class PhyAnimationScene2D(Scene):
         )
 
         for obj in self.animation.objects.values():
-            obj.mobject.clear_updaters()
+            if obj.mobject is not None:
+                obj.mobject.clear_updaters()

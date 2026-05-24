@@ -167,7 +167,11 @@ class PhysicsAnimation:
                     # 本段没有解，从上一帧继承
                     elif state in start_keyframe.object_states[object_id].keys():
                         state_value = start_keyframe.object_states[object_id][state]
-                        obj_functions[state] = InterpolatedStateFunction(times=(t_start, t_end), values=(state_value, state_value))
+                        obj_functions[state] = InterpolatedStateFunction(
+                            times=(t_start, t_end),
+                            values=(state_value, state_value),
+                            clamp=clamp,
+                        )
 
                     else:
                         raise ValueError(
@@ -209,6 +213,7 @@ class PhysicsAnimation:
                     seg_functions[name] = InterpolatedStateFunction(
                         times=(t_start, t_end),
                         values=(last_known[name], last_known[name]),
+                        clamp=clamp,
                     )
                 else:
                     raise ValueError(

@@ -8,6 +8,7 @@ from phyanim import (
     PointParticle,
     StateTransition,
 )
+from manim import Circle
 from phyanim.solver import ScipySegmentSolver
 
 
@@ -76,7 +77,7 @@ def test_dense_solution_returns_state_functions() -> None:
 
 def test_state_function_can_reject_out_of_range_time() -> None:
     animation = PhysicsAnimation()
-    animation.add_object(PointParticle("p", mass=1.0), {"x": 0.0, "y": 0.0, "vx": 1.0, "vy": 0.0})
+    animation.add_object(PointParticle("p", mass=1.0, state_names={"x": "x", "y": "y", "vx": "vx", "vy": "vy"}, cartesian_position={"x": "x", "y": "y"}), {"x": 0.0, "y": 0.0, "vx": 1.0, "vy": 0.0})
     animation.add_segment(
         PhysicsSegment(
             segment_id="move",
@@ -294,3 +295,19 @@ def test_end_event_triggered_at_segment_start_is_rejected() -> None:
         assert "triggered at segment start" in str(exc)
     else:
         raise AssertionError("Expected an end event active at segment start to fail.")
+
+
+def test_point_particle_defaults_to_renderable_circle_and_cartesian_coordinates() -> None:
+    particle = PointParticle("ball", mass=1.0, state_names={"theta": "theta", "omega": "omega"}, cartesian_position={"x": "x_ball", "y": "y_ball"})
+
+    assert isinstance(particle.mobject, Circle)
+    assert particle.cartesian_position_variables() == ("x_ball", "y_ball")
+    assert list(particle.state_variables) == ["theta", "omega"]
+
+
+def test_point_particle_default_cartesian_coordinates_remain_simple() -> None:
+    particle = PointParticle("p", mass=1.0, state_names={"x": "x", "y": "y", "vx": "vx", "vy": "vy"}, cartesian_position={"x": "x", "y": "y"})
+
+    assert isinstance(particle.mobject, Circle)
+    assert particle.cartesian_position_variables() == ("x", "y")
+    assert list(particle.state_variables) == ["x", "y", "vx", "vy"]
