@@ -3,7 +3,7 @@
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.events import EventCondition, PhysicsEvent, StateTransition, time_end_event, time_countdown_event
 from phyanim.core.keyframe import PhysicsKeyFrame
-from phyanim.core.objects import PhysicObject, PointParticle
+from phyanim.core.objects import PhysicObject2D, PointParticle
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.solution import SegmentResult, SegmentSolution, StateFunction
 from phyanim.core.state import Parameter, StateVariable
@@ -13,7 +13,7 @@ __all__ = [
     "EventCondition",
     "InterpolatedStateFunction",
     "Parameter",
-    "PhysicObject",
+    "PhysicObject2D",
     "PhysicsAnimation",
     "PhysicsEvent",
     "PhysicsKeyFrame",

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from phyanim.core.events import PhysicsEvent
 from phyanim.core.keyframe import PhysicsKeyFrame
-from phyanim.core.objects import PhysicObject
+from phyanim.core.objects import PhysicObject2D
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.solution import SegmentResult, StateFunction
 from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
@@ -15,7 +15,7 @@ from phyanim.solver.scipy_solver import ScipySegmentSolver
 class PhysicsAnimation:
     """Coordinates objects, sequential segments, keyframes, and timelines."""
 
-    objects: dict[str, PhysicObject] = field(default_factory=dict)
+    objects: dict[str, PhysicObject2D] = field(default_factory=dict)
     segments: list[PhysicsSegment] = field(default_factory=list)
     global_parameters: dict[str, float] = field(default_factory=dict)
     initial_keyframe: PhysicsKeyFrame | None = None
@@ -25,7 +25,7 @@ class PhysicsAnimation:
     segment_end_events: list[PhysicsEvent] = field(default_factory=list)
 
     # 将object添加到动画中，initial_state必须在object.state_variables中定义
-    def add_object(self, obj: PhysicObject, initial_state: dict[str, float]) -> None:
+    def add_object(self, obj: PhysicObject2D, initial_state: dict[str, float]) -> None:
         invalid_global_parameters = [name for name in self.global_parameters if not name.isidentifier()]
         if invalid_global_parameters:
             raise ValueError(f"Global parameter names must be valid identifiers: {invalid_global_parameters}")
