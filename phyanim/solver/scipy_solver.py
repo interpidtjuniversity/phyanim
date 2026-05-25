@@ -9,9 +9,11 @@ from phyanim.core.segment import PhysicsSegment
 from phyanim.core.solution import SegmentResult, SegmentSolution, StateFunction
 from phyanim.core.trajectory import Trajectory
 
+from phyanim.solver.solver import Solver
+
 
 @dataclass
-class ScipySegmentSolver:
+class ScipySegmentSolver(Solver):
     """基于 solve_ivp 的高精度连续段求解器。"""
 
     method: str = "DOP853"
@@ -204,17 +206,6 @@ class ScipySegmentSolver:
             for name, function in derived_functions.items():
                 derived_history[name].append(float(function(float(time), dict(state), dict(parameters))))
         return derived_history
-
-    def _split_state_history_by_object(
-        self,
-        segment: PhysicsSegment,
-        state_history: dict[str, list[float]],
-    ) -> dict[str, dict[str, list[float]]]:
-        object_states = {object_id: {} for object_id in segment.object_ids or []}
-        assert segment.state_owners is not None
-        for name, values in state_history.items():
-            object_states[segment.state_owners[name]][name] = values
-        return object_states
 
     def _make_solution(
         self,

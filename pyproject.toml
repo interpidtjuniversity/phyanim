@@ -7,6 +7,9 @@ dependencies = [
     "numpy",
     "scipy",
     "sympy",
+    "manim",
+    "heyoka",
+    "matplotlib"
 ]
 
 [tool.setuptools.packages.find]
