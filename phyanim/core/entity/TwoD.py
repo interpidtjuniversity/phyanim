@@ -65,7 +65,7 @@ class ConvexTrack(VMobject):
             y = self.radius * np.sin(angle)
             points.append(np.array([x, y, 0]))
         # 加入起始点
-        x_start, y_start = points[0]
+        x_start, y_start = points[0][0], points[0][1]
         points.append(np.array([x_start, y_start, 0]))
 
         self.set_points_as_corners(points)
@@ -84,12 +84,96 @@ class StraightTrack(VMobject):
 
 # 直线轨道组
 class StraightTrackGroup(VMobject):
-    def __init__(self, tracks: list[np.ndarray], color: str = WHITE, fill_opacity: float = 0.3, stroke_width: float = 2,**kwargs):
+    def __init__(self, tracks: list[np.ndarray], color: str = WHITE, stroke_width: float = 2,**kwargs):
         super().__init__(**kwargs)
         self.points = []
         for track in tracks:
             self.points.append(track)
         self.set_points_as_corners(self.points)
         self.set_stroke(color=color, width=stroke_width)
-        self.set_fill(color=color, opacity=fill_opacity)
+
+# 动态弹簧：由两个端点决定长度、方向和位置。
+# 把弹簧声明成一个形状，严格执行计算与渲染分离
+from manim import LEFT, RIGHT
+class Spring(VMobject):
+    """动态弹簧：由两个端点决定长度、方向和位置。
+        start: 起点坐标 (np.array)
+        end:   终点坐标 (np.array)
+        coils: 圈数（默认 10）
+        radius: 弹簧半径（默认 0.2）
+        color: 颜色
+        stroke_width: 线宽
+        num_points: 路径采样点数（默认 200，越大越光滑）
+    """
+    def __init__(
+        self,
+        start: np.ndarray = LEFT,
+        end: np.ndarray = RIGHT,
+        coils: int = 10,
+        radius: float = 0.2,
+        color: str = WHITE,
+        stroke_width: float = 2,
+        num_points: int = 200,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.start = np.array(start)
+        self.end = np.array(end)
+        self.coils = coils
+        self.radius = radius
+        self.num_points = num_points
+
+        # 初始绘制
+        self._update_path()
+        self.set_stroke(color=color, width=stroke_width)
+
+        # 添加自动更新器：每帧自动根据端点重绘
+        self.add_updater(lambda mob, dt: mob._update_path())
+
+    # 返回两个callback
+    def point_change_callbacks(self):
+        self.start_point_change_callback = lambda x, y: self.set_start_point(np.array([x, y]))
+        self.end_point_change_callback = lambda x, y: self.set_end_point(np.array([x, y]))
+        return [self.start_point_change_callback, self.end_point_change_callback]
+
+    def set_start_end(self, start: np.ndarray, end: np.ndarray):
+        self.start = np.array(start)
+        self.end = np.array(end)
+        self._update_path()
+
+    def set_start_point(self, start: np.ndarray):
+        self.start = np.array(start)
+        self._update_path()
+    
+    def set_end_point(self, end: np.ndarray):
+        self.end = np.array(end)
+        self._update_path()
+
+    # 重新生成模型
+    def _update_path(self):
+        """根据当前端点重新生成螺旋线路径"""
+        D = self.end - self.start
+        L = np.linalg.norm(D)
+        if L < 1e-12:
+            # 长度为零时退化为一个点
+            self.set_points_as_corners([self.start, self.start])
+            return
+
+        # 标准弹簧参数 t (0..1)
+        t = np.linspace(0, 1, self.num_points)
+        # x = L*t, y = radius * sin(2pi * coils * t)
+        y_std = self.radius * np.sin(2 * np.pi * self.coils * t)
+
+        # 方向向量
+        u = D / L  # 单位向量，平行弹簧方向
+        v = np.array([-u[1], u[0], 0.0]) # 单位向量，垂直弹簧方向
+
+        # 每个点的坐标 = start + x_std_i * u + y_std_i * v
+        points = []
+        for i in range(self.num_points):
+            x = self.start[0] + t[i]*D[0] + y_std[i]*v[0]
+            y = self.start[1] + t[i]*D[1] + y_std[i]*v[1]
+            points.append(np.array([x, y, 0]))
+
+        self.set_points_smoothly(points)  # 使用 set_points_smoothly 绘制平滑曲线
 

@@ -36,10 +36,7 @@ if __name__ == "__main__":
             "x_track": StateVariable("x_track", "m", "轨道中心水平位置"),
             "y_track": StateVariable("y_track", "m", "轨道中心垂直位置"),
         },
-        cartesian_position={
-            "x": "x_track",
-            "y": "y_track",
-        },
+        cartesian_position=[("x_track", "y_track")],
         mobject=ConcaveTrack(width=4, height=2, radius=1, color="red")
     )
 
@@ -51,7 +48,7 @@ if __name__ == "__main__":
         radius=0.1,
         parameter_names={"mass": "m"},
         state_names={"theta": "theta", "omega": "omega"},
-        cartesian_position={"x": "x_ball", "y": "y_ball"}
+        cartesian_position=("x_ball", "y_ball"),
     )
 
     # 初始条件：θ = -π/2（左侧最高点），静止释放

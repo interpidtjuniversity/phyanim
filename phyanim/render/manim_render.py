@@ -58,7 +58,7 @@ class PhyAnimationScene2D(Scene):
             f"Trajectory intervals: {list(zip(self.start_times, self.end_times))}"
         )
 
-    def eval_position(self, obj_id: str, t: float) -> Tuple[float, float]:
+    def eval_position(self, obj_id: str, t: float) -> list[Tuple[float, float]]:
         """评估 obj_id 在时间 t 处的位置，返回具体数值 x, y。"""
 
         tra_idx = self.find_trajectory_index(t)
@@ -73,18 +73,23 @@ class PhyAnimationScene2D(Scene):
         all_states_deriveds.update(obj_seg_state_funcs)
         all_states_deriveds.update(derived_funcs)
 
-        x_name, y_name = obj.cartesian_position_variables()
+        cartesian_positions = []
 
-        if x_name not in all_states_deriveds or y_name not in all_states_deriveds:
-            raise ValueError(
-                f"Object {obj_id} does not have position variables "
-                f"{x_name} and {y_name}"
-            )
+        cartesian_position_variables = obj.cartesian_position_variables()
+        for cartesian_position_variable in cartesian_position_variables:
+            x_name, y_name = cartesian_position_variable
+            if x_name not in all_states_deriveds or y_name not in all_states_deriveds:
+                raise ValueError(
+                    f"Object {obj_id} does not have position variables "
+                    f"{x_name} and {y_name}"
+                )
 
-        x_func = all_states_deriveds[x_name]
-        y_func = all_states_deriveds[y_name]
+            x_func = all_states_deriveds[x_name]
+            y_func = all_states_deriveds[y_name]
 
-        return float(x_func(t)), float(y_func(t))
+            cartesian_positions.append((float(x_func(t)), float(y_func(t))))
+
+        return cartesian_positions
     
     def set_frame_size(self, width: float, height: float) -> None:
         self.frame_width = width
@@ -96,16 +101,50 @@ class PhyAnimationScene2D(Scene):
         for obj_id, obj in self.animation.objects.items():
             if obj.mobject is None:
                 raise ValueError(f"Object '{obj_id}' has no mobject for rendering.")
-            self.add(obj.mobject)
 
-            def make_updater(current_obj_id: str):
+            mob = obj.mobject
+            self.add(mob)
+
+            cartesian_position_variables = obj.cartesian_position_variables()
+
+            callbacks = None
+
+            if len(cartesian_position_variables) > 1:
+                if hasattr(mob, "point_change_callbacks"):
+                    callbacks = mob.point_change_callbacks()
+
+                    if len(callbacks) != len(cartesian_position_variables):
+                        raise ValueError(
+                            f"Object '{obj_id}' has {len(cartesian_position_variables)} "
+                            f"cartesian positions, but its mobject provides {len(callbacks)} callbacks."
+                        )
+                else:
+                    raise TypeError(
+                        f"Object '{obj_id}' uses multiple cartesian positions, "
+                        "but its mobject implements neither set_control_points() "
+                        "nor point_change_callbacks()."
+                    )
+
+            def make_updater(
+                current_obj_id: str,
+                current_callbacks=None,
+            ):
                 def updater(m):
                     t = tracker.get_value()
-                    x, y = self.eval_position(current_obj_id, t)
-                    m.move_to(np.array([x, y, 0.0]))
+                    cartesian_positions = self.eval_position(current_obj_id, t)
+
+                    if len(cartesian_positions) == 1:
+                        x, y = cartesian_positions[0]
+                        m.move_to(np.array([x, y, 0.0]))
+                        return
+
+                    for callback, position in zip(current_callbacks, cartesian_positions):
+                        x, y = position
+                        callback(x, y)
+
                 return updater
 
-            obj.mobject.add_updater(make_updater(obj_id))
+            mob.add_updater(make_updater(obj_id, callbacks))
 
         self.play(
             tracker.animate.set_value(self.total_time),
@@ -116,3 +155,4 @@ class PhyAnimationScene2D(Scene):
         for obj in self.animation.objects.values():
             if obj.mobject is not None:
                 obj.mobject.clear_updaters()
+

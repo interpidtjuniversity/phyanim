@@ -18,9 +18,9 @@ if __name__ == "__main__":
     # 向右的匀强场，场强为1N/C
     animation = PhysicsAnimation(global_parameters={"E":1})
     # 定义一个带电点粒子A
-    particleA = PointParticle("particleA",  mass=1.0, charge=1.0, radius=0.01, color="red", parameter_names={"mass":"mA", "charge":"qA"}, state_names={"x":"xA", "y":"yA", "vx":"vxA", "vy":"vyA"}, cartesian_position={"x": "xA", "y": "yA"})
+    particleA = PointParticle("particleA",  mass=1.0, charge=1.0, radius=0.01, color="red", parameter_names={"mass":"mA", "charge":"qA"}, state_names={"x":"xA", "y":"yA", "vx":"vxA", "vy":"vyA"}, cartesian_position=("xA", "yA"))
     # 定义一个带电点粒子B
-    particleB = PointParticle("particleB",  mass=1.0, charge=-1.0, radius=0.01, color="blue", parameter_names={"mass":"mB", "charge":"qB"}, state_names={"x":"xB", "y":"yB", "vx":"vxB", "vy":"vyB"}, cartesian_position={"x": "xB", "y": "yB"})
+    particleB = PointParticle("particleB",  mass=1.0, charge=-1.0, radius=0.01, color="blue", parameter_names={"mass":"mB", "charge":"qB"}, state_names={"x":"xB", "y":"yB", "vx":"vxB", "vy":"vyB"}, cartesian_position=("xB", "yB"))
     animation.add_object(particleA, {"xA":-2, "vxA":1, "yA":0.0, "vyA":0.0})
     animation.add_object(particleB, {"xB":2, "vxB":-1, "yB":0.0, "vyB":0.0})
 
