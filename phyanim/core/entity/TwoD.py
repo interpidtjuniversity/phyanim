@@ -117,8 +117,8 @@ class Spring(VMobject):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.start = np.array(start)
-        self.end = np.array(end)
+        self.start = self._to_3d(np.array(start))
+        self.end = self._to_3d(np.array(end))
         self.coils = coils
         self.radius = radius
         self.num_points = num_points
@@ -130,23 +130,32 @@ class Spring(VMobject):
         # 添加自动更新器：每帧自动根据端点重绘
         self.add_updater(lambda mob, dt: mob._update_path())
 
+    @staticmethod
+    def _to_3d(arr: np.ndarray) -> np.ndarray:
+        if arr.shape == (2,):
+            return np.array([arr[0], arr[1], 0.0])
+        elif arr.shape == (3,):
+            return arr
+        else:
+            raise ValueError(f"2D spring point must have 2 or 3 dimensions. Invalid input shape: {arr.shape}")
+
     # 返回两个callback
     def point_change_callbacks(self):
-        self.start_point_change_callback = lambda x, y: self.set_start_point(np.array([x, y]))
-        self.end_point_change_callback = lambda x, y: self.set_end_point(np.array([x, y]))
+        self.start_point_change_callback = lambda x, y: self.set_start_point(np.array([x, y, 0.0]))
+        self.end_point_change_callback = lambda x, y: self.set_end_point(np.array([x, y, 0.0]))
         return [self.start_point_change_callback, self.end_point_change_callback]
 
     def set_start_end(self, start: np.ndarray, end: np.ndarray):
-        self.start = np.array(start)
-        self.end = np.array(end)
+        self.start = self._to_3d(np.array(start))
+        self.end = self._to_3d(np.array(end))
         self._update_path()
 
     def set_start_point(self, start: np.ndarray):
-        self.start = np.array(start)
+        self.start = self._to_3d(np.array(start))
         self._update_path()
     
     def set_end_point(self, end: np.ndarray):
-        self.end = np.array(end)
+        self.end = self._to_3d(np.array(end))
         self._update_path()
 
     # 重新生成模型

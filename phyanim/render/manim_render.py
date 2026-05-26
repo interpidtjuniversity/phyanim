@@ -75,17 +75,36 @@ class PhyAnimationScene2D(Scene):
 
         cartesian_positions = []
 
+        other_obj_state_funcs = {}
+        for other_obj_id in self.animation.objects:
+            if other_obj_id != obj_id:
+                funcs = self.state_funcs[seg_id][other_obj_id]
+                other_obj_state_funcs.update(funcs)
+
         cartesian_position_variables = obj.cartesian_position_variables()
         for cartesian_position_variable in cartesian_position_variables:
             x_name, y_name = cartesian_position_variable
-            if x_name not in all_states_deriveds or y_name not in all_states_deriveds:
-                raise ValueError(
-                    f"Object {obj_id} does not have position variables "
-                    f"{x_name} and {y_name}"
-                )
+            if x_name not in all_states_deriveds:
+                if x_name in other_obj_state_funcs:
+                    x_func = other_obj_state_funcs[x_name]
+                else:
+                    raise ValueError(
+                        f"Object {obj_id} position x variables "
+                        f"{x_name} not found in other objects."
+                    )
+            else:
+                x_func = all_states_deriveds[x_name]
 
-            x_func = all_states_deriveds[x_name]
-            y_func = all_states_deriveds[y_name]
+            if y_name not in all_states_deriveds:
+                if y_name in other_obj_state_funcs:
+                    y_func = other_obj_state_funcs[y_name]
+                else:
+                    raise ValueError(
+                        f"Object {obj_id} position y variables "
+                        f"{y_name} not found in other objects."
+                    )
+            else: 
+                y_func = all_states_deriveds[y_name]
 
             cartesian_positions.append((float(x_func(t)), float(y_func(t))))
 
