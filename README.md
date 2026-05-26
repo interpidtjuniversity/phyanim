@@ -9,7 +9,12 @@
 
 ### 🎬 预览
 
-| 带电粒子在静电场中的弹性碰撞 (碰撞2次) | 水平动量守恒 & 能量守恒 | 矢量弹簧伸缩演示 |
-|:---:|:---:|:---:|
-| [![charged_particle_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/charged_particle_collision.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/charged_particle_collision.mp4) | [![conservation_of_momentum](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/conservation_of_momentum.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/conservation_of_momentum.mp4) | [![spring_move](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_move.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_move.mp4) |
-| *两个带正/负电粒子在匀强电场中运动并发生弹性碰撞* | *可移动半圆形轨道，系统水平动量与机械能守恒* | *弹簧两端绑定变量，根据力学方程自动伸缩* |
+| 带电粒子在静电场中的弹性碰撞 (碰撞2次) | 水平动量守恒 & 能量守恒 |
+|:---:|:---:|
+| [![charged_particle_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/charged_particle_collision.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/charged_particle_collision.mp4) | [![conservation_of_momentum](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/conservation_of_momentum.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/conservation_of_momentum.mp4) | [!
+| *两个带正/负电粒子在匀强电场中运动并发生弹性碰撞* | *可移动半圆形轨道，系统水平动量与机械能守恒* | 
+
+| 弹性碰撞| 弹簧摆|
+|:---:|:---:|
+| [![spring_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_collision.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_collision.mp4) | [![spring_pendulum](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_pendulum.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_pendulum.mp4) | [!
+| *两个等质量物体的弹性碰撞（通过弹簧）* | *弹簧摆* | 
