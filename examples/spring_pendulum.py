@@ -95,7 +95,7 @@ if __name__ == "__main__":
         end_event=event,
     )
 
-    animation.solve(HeyokaSegmentSolver(sample_dt=1/60))
+    #animation.solve(HeyokaSegmentSolver(sample_dt=1/60))
 
     scene = PhyAnimationScene2D()
     # scene.set_frame_size(width=1000, height=1000)
