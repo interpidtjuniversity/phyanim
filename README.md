@@ -17,4 +17,4 @@
 | 弹性碰撞| 弹簧摆|
 |:---:|:---:|
 | [![spring_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_collision.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_collision.mp4) | [![spring_pendulum](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_pendulum.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_pendulum.mp4) | [!
-| *两个等质量物体的弹性碰撞（通过弹簧）* | *弹簧摆* | 
+| *两个小球的弹性碰撞（通过弹簧m1=2kg,m2=1kg）* | *弹簧摆* | 
