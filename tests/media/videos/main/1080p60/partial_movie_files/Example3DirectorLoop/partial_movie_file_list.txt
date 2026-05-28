@@ -1,0 +1,10 @@
+# This file is used internally by FFMPEG.
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/3544663784_995710805_2295354439.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_1119744246_2544552975.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_476559681_1366370402.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_2416020788_755884468.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_3037420890_2294890720.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_2902416370_755884468.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_1756440224_3746494326.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_2206176364_3632131969.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/tests/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_2473256913_3143177432.mp4'

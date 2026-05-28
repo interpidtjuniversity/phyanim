@@ -96,15 +96,15 @@ class PhysicsAnimation:
 
 
     def add_annotation(self, annotation: Annotation) -> None:
-        if annotation.id:
+        if annotation.id is None:
             raise ValueError(
                 f"Annotation '{annotation}' id should not be None or empty"
             )
-        annotations[annotation.id] = annotation
+        self.annotations[annotation.id] = annotation
 
 
     # 求解变量和注释
-    def solve(self, solver: ScipySegmentSolver | None = ScipySegmentSolver(sample_dt=1/60), anno_solver: DefaultAnnotationSolver | None = DefaultAnnotationSolver()):
+    def solve(self, solver: ScipySegmentSolver, anno_solver: DefaultAnnotationSolver):
         animation_ctx = self.solve_simulation(solver)
         annotation_ctx = self.solve_annotation(anno_solver, animation_ctx)
 

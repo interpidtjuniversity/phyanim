@@ -130,7 +130,7 @@ class CrossingTrigger(Trigger):
 
 class AnnotationActivation:
     """注释激活规则，定义了注释在什么时间激活。"""
-    def __init__(self, trigger: Trigger, start_trigger: Trigger = None, end_trigger: Trigger = None, advance: float = None, delay: float = None):
+    def __init__(self, trigger: Trigger | None = None, start_trigger: Trigger | None = None, end_trigger: Trigger | None = None, advance: float | None = None, delay: float | None = None):
         self.trigger = trigger
         self.start_trigger = start_trigger
         self.end_trigger = end_trigger
@@ -157,14 +157,11 @@ class AnnotationActivation:
                 raise ValueError(f"Unknown annotation type: {ann_type}")
 
 class Annotation:
-    def __init__(self, id: str, ann_type: str, position: tuple[str, str], content: Any, activation: AnnotationActivation):
+    def __init__(self, id: str, ann_type: str, content: Any, activation: AnnotationActivation):
         self.id = id
         self.ann_type = ann_type
-        self.position = position
         # 内容对象
         self.content = content
-        # 展示对象
-        self.obj : Mobject = None
         self.rule : ActiveRule = activation.build_rule(self.ann_type)
 
 

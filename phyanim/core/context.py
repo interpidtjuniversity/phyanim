@@ -91,6 +91,8 @@ class AnimationContext:
     
     # 支持所有state变量和derived变量
     def value_at_time(self, name: str, t: float) -> float:
+        if name == "t":
+            return t
         """评估 name 在时间 t 处的数值。"""
         tra_idx = self.find_trajectory_index(t)
         seg_id = self.tra_map[tra_idx]
@@ -153,7 +155,7 @@ class AnimationContext:
         for name in names:
             values.append(self.value_at_time(name, t))
         
-        result = float(compiled_expression.function.evaluate(*values))
+        result = float(compiled_expression.function(*values))
 
         match return_type:
             case "float":
@@ -240,7 +242,16 @@ class AnnotationContext:
         # 已经触发的注释字典，键为注释规格，值为触发时间列表（在渲染时使用，记录注释触发的次数等上下文）
         self.triggered_annotations = {}
 
+        self.construct_action()
+
     #这里可以进行一些其它的初始化
+
+    # 构造镜头
+    def construct_action(self):
+        """构造镜头，from timeline"""
+        pass
+        
+
 
 
                     

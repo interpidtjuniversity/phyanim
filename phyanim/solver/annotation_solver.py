@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from phyanim.core.context import AnimationContext
 from phyanim.core.context import AnnotationContext
 
-from phyanim.core.annotation.annotation import Annotation
+from phyanim.core.annotation.annotation import Annotation, ActiveWhile, ActivateEventTimeRange, ActiveBetween
 
 @dataclass
 class DefaultAnnotationSolver:
@@ -21,7 +21,7 @@ class DefaultAnnotationSolver:
             for annotation_id, annotation in self.annotations.items():
 
                 if isinstance(annotation.rule, ActiveWhile):
-                    eval_result = animation_ctx.eval_expr(annotation.rule.condition, "bool", t)
+                    eval_result = animation_ctx.eval_expr(annotation.rule.trigger.expression, "bool", t)
                     # 事件还没开始，就评估事件是否开始
                     if annotation_id not in start_map:
                         # 事件已经开始，标记开始时间
@@ -31,12 +31,9 @@ class DefaultAnnotationSolver:
                     else:
                         # 事件已经结束，标记结束时间
                         if not eval_result:
-                            end_map[annotation_id] = t
-                            # 标记事件发生时间段
                             self.timeline.setdefault(annotation_id, []).append(
                                 (start_map[annotation_id], t)
                             )
-                            # 事件已经结束，清除开始时间
                             start_map.pop(annotation_id)
                 
                 elif isinstance(annotation.rule, ActivateEventTimeRange):
