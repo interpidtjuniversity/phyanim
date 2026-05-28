@@ -9,7 +9,6 @@ from phyanim.core.segment import PhysicsSegment
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.events import PhysicsEvent, time_countdown_event
 from phyanim.render import PhyAnimationScene2D
-from phyanim.solver import ScipySegmentSolver, HeyokaSegmentSolver
 from phyanim.core.objects import PointParticle
 from phyanim.core.events import EventCondition, StateTransition
 
@@ -98,22 +97,8 @@ if __name__ == "__main__":
         ),
         end_event=time_countdown_event(5),
     )
-    #animation.solve(ScipySegmentSolver(sample_dt=1/20))
-    animation.solve(HeyokaSegmentSolver(sample_dt=1/20))
 
     scene = PhyAnimationScene2D()
     # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)
     scene.render()
-    # exporter = TimelineExporter()
-    # exporter.plot_variables(animation, show=True)
-
-    # drived_functions = animation.build_derived_functions()
-    # print(drived_functions["before_collision1"]["vxAminusOne"](0))
-    # print(drived_functions["before_collision1"]["vxBplusOne"](0))
-    # output_path = Path("phyanim/outputs/mytest.json")
-    # exporter = TimelineExporter()
-    # TimelineExporter().write_json(animation, output_path)
-    # print(f"Wrote {output_path}")
-    # for keyframe in animation.keyframes:
-    #     print(keyframe)

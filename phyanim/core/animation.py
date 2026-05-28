@@ -2,19 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from phyanim.core.context import AnimationContext, AnnotationContext
 from phyanim.core.events import PhysicsEvent
 from phyanim.core.keyframe import PhysicsKeyFrame
 from phyanim.core.objects import PhysicObject2D
 from phyanim.core.segment import PhysicsSegment
-from phyanim.core.solution import SegmentResult, StateFunction
+from phyanim.core.solution import SegmentResult
 from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
 from phyanim.solver.scipy_solver import ScipySegmentSolver
+from phyanim.core.annotation.annotation import Annotation
+from phyanim.solver.annotation_solver import DefaultAnnotationSolver
 
 
 @dataclass
 class PhysicsAnimation:
     """Coordinates objects, sequential segments, keyframes, and timelines."""
-
+    # 变量相关
     objects: dict[str, PhysicObject2D] = field(default_factory=dict)
     segments: list[PhysicsSegment] = field(default_factory=list)
     global_parameters: dict[str, float] = field(default_factory=dict)
@@ -23,6 +26,12 @@ class PhysicsAnimation:
     trajectories: list[Trajectory] = field(default_factory=list)
     segment_results: list[SegmentResult] = field(default_factory=list)
     segment_end_events: list[PhysicsEvent] = field(default_factory=list)
+    segment_parameters: dict[str, dict[str, float]] = field(default_factory=dict)
+    # 变量是否全部求解成功
+    solved: bool = False
+
+    # 注释相关
+    annotations: dict[str, Annotation] = field(default_factory=dict)
 
     # 将object添加到动画中，initial_state必须在object.state_variables中定义
     def add_object(self, obj: PhysicObject2D, initial_state: dict[str, float]) -> None:
@@ -85,8 +94,24 @@ class PhysicsAnimation:
         self.segments.append(segment)
         self.segment_end_events.append(end_event)
 
+
+    def add_annotation(self, annotation: Annotation) -> None:
+        if annotation.id:
+            raise ValueError(
+                f"Annotation '{annotation}' id should not be None or empty"
+            )
+        annotations[annotation.id] = annotation
+
+
+    # 求解变量和注释
+    def solve(self, solver: ScipySegmentSolver | None = ScipySegmentSolver(sample_dt=1/60), anno_solver: DefaultAnnotationSolver | None = DefaultAnnotationSolver()):
+        animation_ctx = self.solve_simulation(solver)
+        annotation_ctx = self.solve_annotation(anno_solver, animation_ctx)
+
+        return animation_ctx, annotation_ctx
+
     # initial_keyframe必须包含所有状态变量的初始值（必须强行保证，否则可能造成数据丢失）
-    def solve(self, solver: ScipySegmentSolver | None = None) -> list[Trajectory]:
+    def solve_simulation(self, solver: ScipySegmentSolver | None = None) -> AnimationContext:
         if self.initial_keyframe is None:
             raise ValueError("PhysicsAnimation requires an initial keyframe before solving.")
         solver = solver or ScipySegmentSolver()
@@ -98,7 +123,9 @@ class PhysicsAnimation:
         for segment, end_event in zip(self.segments, self.segment_end_events):
             # 段调度、事件后的状态衔接都在框架层完成；求解器只处理当前连续段。
             parameters = self._segment_parameters(segment)
+            self.segment_parameters[segment.segment_id] = parameters
             # 一般认为状态转移瞬间完成
+            # t_start和t_end当作是这个段内的参数处理
             parameters.setdefault("t_start", current_keyframe.time)
             parameters.setdefault("t_end", current_keyframe.time + segment.duration)
             result = solver.solve(segment, current_keyframe, parameters, end_event=end_event)
@@ -111,7 +138,20 @@ class PhysicsAnimation:
             current_keyframe = self._apply_segment_event(segment, end_event, result, end_keyframe)
             self.keyframes.append(current_keyframe)
 
-        return list(self.trajectories)
+        self.solved = True
+
+        return AnimationContext(
+                self.build_state_functions(),
+                self.build_derived_functions(),
+                self.trajectories,
+                self.segments,
+                self.segment_parameters,
+                self.objects
+            )
+
+    def solve_annotation(self, solver: DefaultAnnotationSolver | None = None, animation_ctx: AnimationContext | None = None) -> AnnotationContext:
+        return solver.solve(animation_ctx)
+
 
     def solve_segments(self, solver: ScipySegmentSolver | None = None) -> list[SegmentResult]:
         self.solve(solver=solver)
