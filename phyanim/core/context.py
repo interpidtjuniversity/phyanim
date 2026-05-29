@@ -4,7 +4,7 @@ from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.expressions import CompiledExpression
 from phyanim.core.objects import PhysicObject2D
-from phyanim.core.annotation.annotation import Annotation, Trigger, CrossingTrigger
+from phyanim.core.annotation.annotation import Annotation, Trigger, CrossingTrigger, Transition
 
 import sympy as sp
 
@@ -242,16 +242,14 @@ class AnnotationContext:
         # 已经触发的注释字典，键为注释规格，值为触发时间列表（在渲染时使用，记录注释触发的次数等上下文）
         self.triggered_annotations = {}
 
-        self.construct_action()
 
-    #这里可以进行一些其它的初始化
-
-    # 构造镜头
-    def construct_action(self):
-        """构造镜头，from timeline"""
-        pass
+class TransitionContext:
+    """转换上下文，管理整个动画的转换。"""
+    def __init__(self, transitions: dict[str, Transition], timeline: dict[str, list[float]]):
+        self.transitions = transitions
+        self.timeline = timeline
         
-
+        self.triggered_transitions = {}
 
 
                     

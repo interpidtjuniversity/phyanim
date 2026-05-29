@@ -1,0 +1,4 @@
+# This file is used internally by FFMPEG.
+file 'file:D:/clcy/pythonplayground/daily/phyanim/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/3544663784_348306163_1131371998.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_4061870495_3617163137.mp4'
+file 'file:D:/clcy/pythonplayground/daily/phyanim/media/videos/main/1080p60/partial_movie_files/Example3DirectorLoop/260329756_2593173756_894202408.mp4'

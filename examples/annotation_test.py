@@ -13,8 +13,8 @@ from phyanim.core.state import StateVariable
 from phyanim.core.objects import PhysicObject2D
 from phyanim.core.entity.TwoD import Spring
 
-from phyanim.core.annotation.annotation import Annotation, AnnotationActivation, Trigger, CrossingTrigger
-from phyanim.core.annotation.asserts import ArrowAnnotation, MathTexAnnotation, TextAnnotation
+from phyanim.core.annotation.annotation import Annotation, AnnotationActivation, Trigger, CrossingTrigger, Transition
+from phyanim.core.annotation.asserts import ArrowContent, MathTexContent, TextContent, TransitionContent
 
 if __name__ == "__main__":
     # 弹簧劲度系数为 1N/m
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         Annotation(
             id="anno1",
             ann_type="while",
-            content=TextAnnotation(txt="while文本", pos_variables=("start_x", "start_y")),
+            content=TextContent(txt="while文本", pos_variables=("start_x", "start_y")),
             activation=AnnotationActivation(trigger=Trigger(expression="t > 2")),
         )
     )
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         Annotation(
             id="anno2",
             ann_type="between",
-            content=TextAnnotation(txt="between文本", pos_variables=("end_x", "end_y")),
+            content=TextContent(txt="between文本", pos_variables=("end_x", "end_y")),
             activation=AnnotationActivation(start_trigger=CrossingTrigger(expression="t-3", direction=1), end_trigger=CrossingTrigger(expression="t-6", direction=1)),
         )
     )
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         Annotation(
             id="anno3",
             ann_type="time_range",
-            content=TextAnnotation(txt="time_range文本", pos_variables=("0", "2")),
+            content=TextContent(txt="time_range文本", pos_variables=("0", "2")),
             activation=AnnotationActivation(trigger=CrossingTrigger(expression="t - 5", direction=1), advance=1, delay=1),
         )
     )
@@ -108,18 +108,29 @@ if __name__ == "__main__":
         Annotation(
             id="vector_arrow",
             ann_type="while",
-            content=ArrowAnnotation(pos_variables=("end_x", "end_y"), shift_variables=("1", "1"), scale=0.5),
+            content=ArrowContent(pos_variables=("end_x", "end_y"), shift_variables=("1", "1"), scale=0.5, tip_length=0.1),
             activation=AnnotationActivation(trigger=Trigger(expression="t > 0")),
         )
     )
-    # 设置镜头衔接与入场出场
-    # animation.set_annotation_transition(
-
-    # )
-
-    #animation.solve(ScipySegmentSolver(sample_dt=1/20))
-    #animation.solve(HeyokaSegmentSolver(sample_dt=1/10))
-
+    """
+        "fade"        — 纯淡入淡出
+        "scale"       — 缩成一点再扩散（推荐）
+        "slide_left"  — 左滑出 / 右滑入
+        "slide_down"  — 下滑出 / 上滑入
+        "spin"        — 旋转缩放出 / 旋转放大入
+    """
+    animation.add_transition(
+        Transition(
+            id="formula_derivation",
+            group_strings=[["a=1","b=2","c=3","d=4"],["a+b=3", "c+d=7", "a+b+c+d=10"]], 
+            triggers=[CrossingTrigger(expression="t-3", direction=1), CrossingTrigger(expression="t-6", direction=1), CrossingTrigger(expression="t-9", direction=1)],
+            pos_variables=("end_x", "end_y"),
+            group_dir={},
+            style="spin",
+            duration=0.5,
+        )
+    )
+    
     scene = PhyAnimationScene2D()
     # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)

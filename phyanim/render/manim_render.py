@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import numpy as np
+from typing import Callable
 
-from manim import Scene, ValueTracker, linear
+from manim import Scene, ValueTracker, linear, VGroup, PI
+
+
 
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.solver import HeyokaSegmentSolver
 from phyanim.solver.annotation_solver import DefaultAnnotationSolver
-from phyanim.core.annotation.asserts import ArrowAnnotation, MathTexAnnotation, TextAnnotation
+from phyanim.solver.transition_solver import DefaultTransitionSolver
+from phyanim.core.annotation.asserts import ArrowContent, MathTexContent, TextContent, TransitionContent
 
 from phyanim.utils.util import is_numeric
 
@@ -21,34 +25,206 @@ class PhyAnimationScene2D(Scene):
         self.animation = animation
         # 变量管理上下文
         # 注释管理上下文
-        self.ctx, self.anno_ctx = animation.solve(HeyokaSegmentSolver(sample_dt=1/20), DefaultAnnotationSolver(annotations=self.animation.annotations))
+        self.ctx, self.anno_ctx, self.transition_ctx = animation.solve(
+            HeyokaSegmentSolver(sample_dt=1/20), 
+            DefaultAnnotationSolver(annotations=self.animation.annotations), 
+            DefaultTransitionSolver(transitions=self.animation.transitions)
+        )
     
     def set_frame_size(self, width: float, height: float) -> None:
         self.frame_width = width
         self.frame_height = height
 
+    # 普通物理对象
+    def make_obj_position_updater(
+        self,
+        current_obj_id: str,
+        current_callbacks=None,
+        tracker: ValueTracker = None,
+    ):
+        def updater(m):
+            t = tracker.get_value()
+            cartesian_positions = self.ctx.eval_position(current_obj_id, t)
+
+            if len(cartesian_positions) == 1:
+                x, y = cartesian_positions[0]
+                m.move_to(np.array([x, y, 0.0]))
+                return
+
+            for callback, position in zip(current_callbacks, cartesian_positions):
+                x, y = position
+                callback(x, y)
+        return updater    
+    
+    def make_anno_position_updater(
+        self,
+        anno_id: str,
+        content,
+        callback=None,
+        tracker: ValueTracker = None,
+    ):
+        def updater(m):
+            t = tracker.get_value()
+                
+            timeline = self.anno_ctx.timeline.get(anno_id, [])
+            visible = any(start <= t <= end for start, end in timeline)
+            m.set_opacity(1.0 if visible else 0.0)
+
+            if not visible:
+                return
+
+            x_pos_name, y_pos_name = content.pos_variables
+
+            x_pos_value, y_pos_value = None, None
+            if not is_numeric(x_pos_name):
+                x_pos_value = self.ctx.value_at_time(x_pos_name, t)
+            else:
+                x_pos_value = float(x_pos_name)
+            if not is_numeric(y_pos_name):
+                y_pos_value = self.ctx.value_at_time(y_pos_name, t)
+            else:
+                y_pos_value = float(y_pos_name)
+
+            if isinstance(content, ArrowContent):
+                x_shift_name, y_shift_name = content.shift_variables
+                x_shift_value, y_shift_value = None, None
+                if not is_numeric(x_shift_name):
+                    x_shift_value = self.ctx.value_at_time(x_shift_name, t)
+                else:
+                    x_shift_value = float(x_shift_name)
+                if not is_numeric(y_shift_name):
+                    y_shift_value = self.ctx.value_at_time(y_shift_name, t)
+                else:
+                    y_shift_value = float(y_shift_name)
+                callback(x_pos_value, y_pos_value, x_shift_value, y_shift_value)
+                
+            elif isinstance(content, (MathTexContent, TextContent)):
+                callback(x_pos_value, y_pos_value)
+
+        return updater
+
+    def make_sequential(self, transition, groups, times, tracker, style="scale", duration=0.5, smooth_func : Callable[[float], float] = lambda x: x * x * (3 - 2 * x)):
+        """
+        根据 tracker 在多个公式之间依次切换，支持多种动画风格。
+        formulas: [mob_a, mob_b, mob_c, mob_d]
+        times:    [2, 4, 6, 7, 8]  — 各切换时间点
+        style:    动画风格:
+            "fade"        — 纯淡入淡出
+            "scale"       — 缩成一点再扩散（推荐）
+            "slide_left"  — 左滑出 / 右滑入
+            "slide_down"  — 下滑出 / 上滑入
+            "spin"        — 旋转缩放出 / 旋转放大入
+        duration: 过渡持续时间（秒）
+        """
+        container = VGroup(*groups)
+        n = len(groups)
+        refs = [f.copy() for f in groups]
+
+        def apply_out(mob, ref, alpha):
+            """alpha: 0=完全可见, 1=完全消失"""
+            a = smooth_func(alpha)
+            if style == "fade":
+                mob.set_opacity(1 - a)
+            elif style == "scale":
+                s = 1 - a
+                mob.scale(s)
+                mob.set_opacity(max(0, 1 - a * 1.5))
+            elif style == "slide_left":
+                mob.shift(LEFT * a * 2)
+                mob.set_opacity(1 - a)
+            elif style == "slide_down":
+                mob.shift(DOWN * a * 2)
+                mob.set_opacity(1 - a)
+            elif style == "spin":
+                s = 1 - a
+                mob.scale(s)
+                mob.rotate(a * PI / 2)
+                mob.set_opacity(max(0, 1 - a * 1.5))
+
+        def apply_in(mob, ref, alpha):
+            """alpha: 0=完全不可见, 1=完全可见"""
+            a = smooth_func(alpha)
+            if style == "fade":
+                mob.set_opacity(a)
+            elif style == "scale":
+                mob.scale(max(0.01, a))
+                mob.set_opacity(min(1, a * 1.5))
+            elif style == "slide_left":
+                mob.shift(RIGHT * (1 - a) * 2)
+                mob.set_opacity(a)
+            elif style == "slide_down":
+                mob.shift(UP * (1 - a) * 2)
+                mob.set_opacity(a)
+            elif style == "spin":
+                mob.scale(max(0.01, a))
+                mob.rotate(-(1 - a) * PI / 2)
+                mob.set_opacity(min(1, a * 1.5))
+
+        # 这里m是最大的那个group(group1(str1,str2), group2(str3,str4,str5,str6))
+        def updater(m):
+            t = tracker.get_value()
+            x_pos_name, y_pos_name = transition.content.pos_variables
+
+            x_pos_value, y_pos_value = None, None
+            if not is_numeric(x_pos_name):
+                x_pos_value = self.ctx.value_at_time(x_pos_name, t)
+            else:
+                x_pos_value = float(x_pos_name)
+            if not is_numeric(y_pos_name):
+                y_pos_value = self.ctx.value_at_time(y_pos_name, t)
+            else:
+                y_pos_value = float(y_pos_name)
+
+            target_pos = np.array([x_pos_value, y_pos_value, 0.0])
+
+            for i in range(n):
+                mob = m.submobjects[i]
+                ref = refs[i]
+                mob.become(ref)  # 每帧重置，避免变换累积
+                mob.move_to(target_pos)
+
+                # 开始出现
+                fi_start = times[i] - duration
+                # 完全出现
+                fi_end = times[i]
+                # 开始消失
+                fo_start = times[i + 1] - duration
+                # 完全消失
+                fo_end = times[i + 1]
+
+                # 处理区间重合的几种情况
+                # 如果完全出现的时刻等于完全消失的时刻，则设置从fi_start到fo_end的先显示再消失
+                if fo_start <= fi_end and fi_end <= fo_end:
+                    if t < fi_start:
+                        mob.set_opacity(0)
+                    elif t <= fo_end:
+                        # 一半的duration用来出现，一半用来消失
+                        span = (fo_end + fi_start) / 2
+                        if t <= span:
+                            apply_in(mob, ref, (t - fi_start) / (span - fi_start))
+                        else:
+                            apply_out(mob, ref, (t - span) / (fo_end - span))
+                    else:
+                        mob.set_opacity(0)
+                elif fi_end < fo_start:
+                    if t < fi_start:
+                        mob.set_opacity(0)
+                    elif t <= fi_end:
+                        apply_in(mob, ref, (t - fi_start) / duration)
+                    elif t < fo_start:
+                        mob.set_opacity(1)
+                    elif t <= fo_end:
+                        apply_out(mob, ref, (t - fo_start) / duration)
+                    else:
+                        mob.set_opacity(0)
+                        
+
+        container.add_updater(updater)
+        return container
+
     def construct(self) -> None:
         tracker = ValueTracker(0.0)
-        #================================物理实体开始================================
-        def make_obj_position_updater(
-            current_obj_id: str,
-            current_callbacks=None,
-        ):
-            def updater(m):
-                t = tracker.get_value()
-                cartesian_positions = self.ctx.eval_position(current_obj_id, t)
-
-                if len(cartesian_positions) == 1:
-                    x, y = cartesian_positions[0]
-                    m.move_to(np.array([x, y, 0.0]))
-                    return
-
-                for callback, position in zip(current_callbacks, cartesian_positions):
-                    x, y = position
-                    callback(x, y)
-
-            return updater    
-
+        #================================物理实体开始================================    
         # 给mobject添加更新器
         for obj_id, obj in self.animation.objects.items():
             if obj.mobject is None:
@@ -77,62 +253,26 @@ class PhyAnimationScene2D(Scene):
                         "nor point_change_callbacks()."
                     )
             # 给物理实体添加updater
-            mob.add_updater(make_obj_position_updater(obj_id, callbacks))
+            mob.add_updater(self.make_obj_position_updater(obj_id, callbacks, tracker))
 
 
         #================================注释实体开始================================
-        def make_anno_position_updater(
-            anno_id: str,
-            content,
-            callback=None,
-        ):
-            def updater(m):
-                t = tracker.get_value()
-                
-                timeline = self.anno_ctx.timeline.get(anno_id, [])
-                visible = any(start <= t <= end for start, end in timeline)
-                m.set_opacity(1.0 if visible else 0.0)
-
-                if not visible:
-                    return
-
-                x_pos_name, y_pos_name = content.pos_variables
-
-                x_pos_value, y_pos_value = None, None
-                if not is_numeric(x_pos_name):
-                    x_pos_value = self.ctx.value_at_time(x_pos_name, t)
-                else:
-                    x_pos_value = float(x_pos_name)
-                if not is_numeric(y_pos_name):
-                    y_pos_value = self.ctx.value_at_time(y_pos_name, t)
-                else:
-                    y_pos_value = float(y_pos_name)
-
-                if isinstance(content, ArrowAnnotation):
-                    x_shift_name, y_shift_name = content.shift_variables
-                    x_shift_value, y_shift_value = None, None
-                    if not is_numeric(x_shift_name):
-                        x_shift_value = self.ctx.value_at_time(x_shift_name, t)
-                    else:
-                        x_shift_value = float(x_shift_name)
-                    if not is_numeric(y_shift_name):
-                        y_shift_value = self.ctx.value_at_time(y_shift_name, t)
-                    else:
-                        y_shift_value = float(y_shift_name)
-                    callback(x_pos_value, y_pos_value, x_shift_value, y_shift_value)
-                
-                elif isinstance(content, (MathTexAnnotation, TextAnnotation)):
-                    callback(x_pos_value, y_pos_value)
-
-            return updater
-
         for anno_id, anno in self.anno_ctx.annotations.items():
+            # 这里的TransitionContent 需要单独运镜处理
+            if isinstance(anno.content, TransitionContent):
+                continue
             self.add(anno.content.obj)
             call_back = anno.content.change_callback()
-            anno.content.obj.add_updater(make_anno_position_updater(anno_id, anno.content, call_back))
+            anno.content.obj.add_updater(self.make_anno_position_updater(anno_id, anno.content, call_back, tracker))
    
-
+        #================================transition开始================================
         # 执行annotation transition动画
+        for trans_id, transition in self.transition_ctx.transitions.items():
+            groups = transition.content.groups
+            group_container = self.make_sequential(transition, groups, self.transition_ctx.timeline[trans_id], tracker, transition.style, transition.duration, transition.smooth_func)
+            self.add(group_container)
+
+
 
         self.play(
             tracker.animate.set_value(self.ctx.total_time),

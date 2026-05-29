@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from phyanim.core.context import AnimationContext, AnnotationContext
+from phyanim.core.context import AnimationContext, AnnotationContext, TransitionContext
 from phyanim.core.events import PhysicsEvent
 from phyanim.core.keyframe import PhysicsKeyFrame
 from phyanim.core.objects import PhysicObject2D
@@ -10,8 +10,9 @@ from phyanim.core.segment import PhysicsSegment
 from phyanim.core.solution import SegmentResult
 from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
 from phyanim.solver.scipy_solver import ScipySegmentSolver
-from phyanim.core.annotation.annotation import Annotation
+from phyanim.core.annotation.annotation import Annotation, Transition
 from phyanim.solver.annotation_solver import DefaultAnnotationSolver
+from phyanim.solver.transition_solver import DefaultTransitionSolver
 
 
 @dataclass
@@ -32,6 +33,9 @@ class PhysicsAnimation:
 
     # 注释相关
     annotations: dict[str, Annotation] = field(default_factory=dict)
+
+    # 过渡相关
+    transitions: dict[str, Transition] = field(default_factory=dict)
 
     # 将object添加到动画中，initial_state必须在object.state_variables中定义
     def add_object(self, obj: PhysicObject2D, initial_state: dict[str, float]) -> None:
@@ -101,14 +105,22 @@ class PhysicsAnimation:
                 f"Annotation '{annotation}' id should not be None or empty"
             )
         self.annotations[annotation.id] = annotation
+    
+    def add_transition(self, transition: Transition) -> None:
+        if transition.id is None:
+            raise ValueError(
+                f"Transition '{transition}' id should not be None or empty"
+            )
+        self.transitions[transition.id] = transition
 
 
     # 求解变量和注释
-    def solve(self, solver: ScipySegmentSolver, anno_solver: DefaultAnnotationSolver):
+    def solve(self, solver: ScipySegmentSolver, anno_solver: DefaultAnnotationSolver, transition_solver: DefaultTransitionSolver):
         animation_ctx = self.solve_simulation(solver)
         annotation_ctx = self.solve_annotation(anno_solver, animation_ctx)
+        transition_ctx = self.solve_transition(transition_solver, animation_ctx)
 
-        return animation_ctx, annotation_ctx
+        return animation_ctx, annotation_ctx, transition_ctx
 
     # initial_keyframe必须包含所有状态变量的初始值（必须强行保证，否则可能造成数据丢失）
     def solve_simulation(self, solver: ScipySegmentSolver | None = None) -> AnimationContext:
@@ -152,10 +164,8 @@ class PhysicsAnimation:
     def solve_annotation(self, solver: DefaultAnnotationSolver | None = None, animation_ctx: AnimationContext | None = None) -> AnnotationContext:
         return solver.solve(animation_ctx)
 
-
-    def solve_segments(self, solver: ScipySegmentSolver | None = None) -> list[SegmentResult]:
-        self.solve(solver=solver)
-        return list(self.segment_results)
+    def solve_transition(self, solver: DefaultTransitionSolver | None = None, animation_ctx: AnimationContext | None = None) -> TransitionContext:
+        return solver.solve(animation_ctx)
 
     def _segment_parameters(self, segment: PhysicsSegment) -> dict[str, float]:
         parameters = segment.merged_parameters(self.global_parameters)

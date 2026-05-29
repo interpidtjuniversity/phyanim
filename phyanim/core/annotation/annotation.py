@@ -1,8 +1,7 @@
 from typing import Any, Callable
+from rich import style
 from scipy.optimize import brentq
 import math
-
-from manim import Mobject
 
 class ActiveRule:
     """注释激活规则，定义了注释在什么时间激活。"""
@@ -164,6 +163,34 @@ class Annotation:
         self.content = content
         self.rule : ActiveRule = activation.build_rule(self.ann_type)
 
+from phyanim.core.annotation.asserts import TransitionContent
+class Transition:
+    def __init__(self, 
+        id: str, 
+        group_strings: list[list[str]], 
+        triggers: list[Trigger], 
+        pos_variables: tuple[str, str], 
+        group_dir: dict[int, str] = {}, 
+        font_size: int = 24, 
+        style: str = "fade", 
+        duration: float = 0.1,
+        smooth_func : Callable[[float], float] = lambda x: x * x * (3 - 2 * x)
+    ):
+        self.id = id
+        self.group_strings = group_strings
+        self.triggers = triggers
+        # 这里是否要添加断言triggers的size要和group_strings的size一致？
+        self.pos_variables = pos_variables
+        self.group_dir = group_dir
+        self.font_size = font_size
+
+        self.style = style
+        self.duration = duration
+        self.smooth_func = smooth_func
+        self.build_content()
+
+    def build_content(self):
+        self.content = TransitionContent(self.group_strings, self.pos_variables, self.group_dir, self.font_size)
 
 class ActiveWhile(ActiveRule):
     """条件为真时激活注释。"""
