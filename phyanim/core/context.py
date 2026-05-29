@@ -251,6 +251,8 @@ class TransitionContext:
         
         self.triggered_transitions = {}
 
+        print(self.timeline)
+
 
                     
                 

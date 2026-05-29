@@ -30,9 +30,17 @@ class ArrowContent(AnnotationContent):
     
     # 更新箭头的位置
     def update(self, x_pos, y_pos, x_shift, y_shift):
+        end_x = x_pos + x_shift * self.scale
+        end_y = y_pos + y_shift * self.scale
+
+        if abs(end_x - x_pos) < 1e-9 and abs(end_y - y_pos) < 1e-9:
+            self.obj.set_opacity(0)
+            return
+
+        self.obj.set_opacity(1)
         self.obj.put_start_and_end_on(
             np.array([x_pos, y_pos, 0.0]),
-            np.array([x_pos + x_shift * self.scale, y_pos + y_shift * self.scale, 0.0]),
+            np.array([end_x, end_y, 0.0]),
         )
 
 class MathTexContent(AnnotationContent):
