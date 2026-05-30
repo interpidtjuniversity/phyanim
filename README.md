@@ -18,3 +18,8 @@
 |:---:|:---:|
 | [![spring_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_collision.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_collision.mp4) | [![spring_pendulum](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_pendulum.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/spring_pendulum.mp4) | [!
 | *两个小球的弹性碰撞（通过弹簧m1=2kg,m2=1kg）* | *弹簧摆* | 
+### 📓 强大的事件驱动标注系统
+| 弹性碰撞求解 | 
+|:---:|
+| [![spring_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.mp4) | [!
+| *支持公式展示，向量标注，文本标注，以及跟随移动* |
