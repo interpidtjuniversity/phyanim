@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 
 from phyanim.core.context import PhysicsContext
-from phyanim.core.context import TimeWrapperContext
 
 from phyanim.core.enhance.timewrapper import TimeWrapper
+from typing import Tuple, Callable
 
 @dataclass
 class DefaultTimeWrapperSolver:
@@ -11,7 +11,7 @@ class DefaultTimeWrapperSolver:
     total_time: float = None
     time_wrappers: dict[str, TimeWrapper] = field(default_factory=dict)
 
-    def solve(self, physics_ctx: PhysicsContext) -> TimeWrapperContext:
+    def solve(self, physics_ctx: PhysicsContext) -> Tuple[float, Callable[[float], float]] :
         # 先评估触发器的触发时间
         old_time = None
         trigger_map = {}
@@ -79,7 +79,5 @@ class DefaultTimeWrapperSolver:
                 return self.time_ranges[left_wrapper_idx][1] + t - self.wrapper_time_ranges[left_wrapper_idx][1]
         
         self.time_mapping_func = time_mapping_func
-
-        print(time_ranges, wrapper_time_ranges)
         
-        return TimeWrapperContext(self.time_wrappers, total_time=self.total_time, time_mapping_func=self.time_mapping_func)
+        return self.total_time, self.time_mapping_func

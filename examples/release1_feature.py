@@ -265,7 +265,7 @@ if __name__ == "__main__":
         )
     )
 
-    scene = PhyAnimationMultiLayerScene2D()
+    scene = PhyAnimationScene2D()
     # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)
     scene.render()

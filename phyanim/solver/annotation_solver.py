@@ -74,4 +74,5 @@ class DefaultAnnotationSolver:
                 (start_map[annotation_id], physics_ctx.total_time)
             )
         
-        return AnnotationContext(self.annotations, self.timeline, physics_ctx.total_time)
+        return AnnotationContext(self.annotations, self.timeline, physics_ctx.value_at_time, physics_ctx.eval_expr, physics_ctx.build_eval_exper_func)
+        

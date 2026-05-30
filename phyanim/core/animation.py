@@ -16,6 +16,9 @@ from phyanim.core.enhance.timewrapper import TimeWrapper
 from phyanim.solver.annotation_solver import DefaultAnnotationSolver
 from phyanim.solver.transition_solver import DefaultTransitionSolver
 from phyanim.solver.timewrapper_solver import DefaultTimeWrapperSolver
+from phyanim.core.layer import Layer
+
+from typing import Tuple, Callable
 
 
 @dataclass
@@ -131,9 +134,16 @@ class PhysicsAnimation:
         physics_ctx = self.solve_simulation(solver)
         annotation_ctx = self.solve_annotation(anno_solver, physics_ctx)
         transition_ctx = self.solve_transition(transition_solver, physics_ctx)
-        time_wrapper_ctx = self.solve_time_wrapper(time_wrapper_solver, physics_ctx)
+        total_time, time_mapping_func = self.solve_time_wrapper(time_wrapper_solver, physics_ctx)
 
-        return physics_ctx, annotation_ctx, transition_ctx, time_wrapper_ctx
+        main_layer = Layer(
+            id="main_layer",
+            contexts=[physics_ctx, annotation_ctx, transition_ctx],
+            time_mapping_func=time_mapping_func,
+            total_time=total_time,
+        )
+
+        return main_layer
 
     # initial_keyframe必须包含所有状态变量的初始值（必须强行保证，否则可能造成数据丢失）
     def solve_simulation(self, solver: ScipySegmentSolver | None = None) -> PhysicsContext:
@@ -180,7 +190,7 @@ class PhysicsAnimation:
     def solve_transition(self, solver: DefaultTransitionSolver | None = None, physics_ctx: PhysicsContext | None = None) -> TransitionContext:
         return solver.solve(physics_ctx)
 
-    def solve_time_wrapper(self, solver: DefaultTimeWrapperSolver | None = None, physics_ctx: PhysicsContext | None = None) -> TimeWrapperContext:
+    def solve_time_wrapper(self, solver: DefaultTimeWrapperSolver | None = None, physics_ctx: PhysicsContext | None = None) -> Tuple[float, Callable[[float], float]] :
         return solver.solve(physics_ctx)
 
     def _segment_parameters(self, segment: PhysicsSegment) -> dict[str, float]:

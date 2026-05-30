@@ -41,4 +41,4 @@ class DefaultTransitionSolver:
             # 排序
             self.timeline[transition_id].sort()
         
-        return TransitionContext(self.transitions, self.timeline, physics_ctx.total_time)
+        return TransitionContext(self.transitions, self.timeline, physics_ctx.value_at_time, physics_ctx.eval_expr, physics_ctx.build_eval_exper_func)
