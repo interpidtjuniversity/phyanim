@@ -11,7 +11,9 @@ from phyanim.core.animation import PhysicsAnimation
 from phyanim.solver import HeyokaSegmentSolver
 from phyanim.solver.annotation_solver import DefaultAnnotationSolver
 from phyanim.solver.transition_solver import DefaultTransitionSolver
-from phyanim.core.annotation.asserts import ArrowContent, MathTexContent, TextContent, TransitionContent
+from phyanim.solver.timewrapper_solver import DefaultTimeWrapperSolver
+from phyanim.core.enhance.annotation import ArrowContent, MathTexContent, TextContent
+from phyanim.core.enhance.transition import TransitionContent
 
 from phyanim.utils.util import is_numeric
 
@@ -25,10 +27,11 @@ class PhyAnimationScene2D(Scene):
         self.animation = animation
         # 变量管理上下文
         # 注释管理上下文
-        self.ctx, self.anno_ctx, self.transition_ctx = animation.solve(
+        self.physics_ctx, self.anno_ctx, self.transition_ctx, self.time_wrapper_ctx = animation.solve(
             HeyokaSegmentSolver(sample_dt=1/20), 
             DefaultAnnotationSolver(annotations=self.animation.annotations), 
-            DefaultTransitionSolver(transitions=self.animation.transitions)
+            DefaultTransitionSolver(transitions=self.animation.transitions),
+            DefaultTimeWrapperSolver(time_wrappers=self.animation.time_wrappers)
         )
     
     def set_frame_size(self, width: float, height: float) -> None:
@@ -44,7 +47,8 @@ class PhyAnimationScene2D(Scene):
     ):
         def updater(m):
             t = tracker.get_value()
-            cartesian_positions = self.ctx.eval_position(current_obj_id, t)
+            physics_t = self.physics_ctx.time_mapping_to_physics(t)
+            cartesian_positions = self.physics_ctx.eval_position(current_obj_id, physics_t)
 
             if len(cartesian_positions) == 1:
                 x, y = cartesian_positions[0]
@@ -65,9 +69,10 @@ class PhyAnimationScene2D(Scene):
     ):
         def updater(m):
             t = tracker.get_value()
+            physics_t = self.physics_ctx.time_mapping_to_physics(t)
                 
             timeline = self.anno_ctx.timeline.get(anno_id, [])
-            visible = any(start <= t <= end for start, end in timeline)
+            visible = any(start <= physics_t <= end for start, end in timeline)
             m.set_opacity(1.0 if visible else 0.0)
 
             if not visible:
@@ -77,11 +82,11 @@ class PhyAnimationScene2D(Scene):
 
             x_pos_value, y_pos_value = None, None
             if not is_numeric(x_pos_name):
-                x_pos_value = self.ctx.value_at_time(x_pos_name, t)
+                x_pos_value = self.physics_ctx.value_at_time(x_pos_name, physics_t)
             else:
                 x_pos_value = float(x_pos_name)
             if not is_numeric(y_pos_name):
-                y_pos_value = self.ctx.value_at_time(y_pos_name, t)
+                y_pos_value = self.physics_ctx.value_at_time(y_pos_name, physics_t)
             else:
                 y_pos_value = float(y_pos_name)
 
@@ -89,11 +94,11 @@ class PhyAnimationScene2D(Scene):
                 x_shift_name, y_shift_name = content.shift_variables
                 x_shift_value, y_shift_value = None, None
                 if not is_numeric(x_shift_name):
-                    x_shift_value = self.ctx.value_at_time(x_shift_name, t)
+                    x_shift_value = self.physics_ctx.value_at_time(x_shift_name, physics_t)
                 else:
                     x_shift_value = float(x_shift_name)
                 if not is_numeric(y_shift_name):
-                    y_shift_value = self.ctx.value_at_time(y_shift_name, t)
+                    y_shift_value = self.physics_ctx.value_at_time(y_shift_name, physics_t)
                 else:
                     y_shift_value = float(y_shift_name)
                 callback(x_pos_value, y_pos_value, x_shift_value, y_shift_value)
@@ -163,15 +168,17 @@ class PhyAnimationScene2D(Scene):
         # 这里m是最大的那个group(group1(str1,str2), group2(str3,str4,str5,str6))
         def updater(m):
             t = tracker.get_value()
+            physics_t = self.physics_ctx.time_mapping_to_physics(t)
+            
             x_pos_name, y_pos_name = transition.content.pos_variables
 
             x_pos_value, y_pos_value = None, None
             if not is_numeric(x_pos_name):
-                x_pos_value = self.ctx.value_at_time(x_pos_name, t)
+                x_pos_value = self.physics_ctx.value_at_time(x_pos_name, physics_t)
             else:
                 x_pos_value = float(x_pos_name)
             if not is_numeric(y_pos_name):
-                y_pos_value = self.ctx.value_at_time(y_pos_name, t)
+                y_pos_value = self.physics_ctx.value_at_time(y_pos_name, physics_t)
             else:
                 y_pos_value = float(y_pos_name)
 
@@ -195,26 +202,26 @@ class PhyAnimationScene2D(Scene):
                 # 处理区间重合的几种情况
                 # 如果完全出现的时刻等于完全消失的时刻，则设置从fi_start到fo_end的先显示再消失
                 if fo_start <= fi_end and fi_end <= fo_end:
-                    if t < fi_start:
+                    if physics_t < fi_start:
                         mob.set_opacity(0)
-                    elif t <= fo_end:
+                    elif physics_t <= fo_end:
                         # 一半的duration用来出现，一半用来消失
                         span = (fo_end + fi_start) / 2
-                        if t <= span:
-                            apply_in(mob, ref, (t - fi_start) / (span - fi_start))
+                        if physics_t <= span:
+                            apply_in(mob, ref, (physics_t - fi_start) / (span - fi_start))
                         else:
-                            apply_out(mob, ref, (t - span) / (fo_end - span))
+                            apply_out(mob, ref, (physics_t - span) / (fo_end - span))
                     else:
                         mob.set_opacity(0)
                 elif fi_end < fo_start:
-                    if t < fi_start:
+                    if physics_t < fi_start:
                         mob.set_opacity(0)
-                    elif t <= fi_end:
-                        apply_in(mob, ref, (t - fi_start) / duration)
-                    elif t < fo_start:
+                    elif physics_t <= fi_end:
+                        apply_in(mob, ref, (physics_t - fi_start) / duration)
+                    elif physics_t < fo_start:
                         mob.set_opacity(1)
-                    elif t <= fo_end:
-                        apply_out(mob, ref, (t - fo_start) / duration)
+                    elif physics_t <= fo_end:
+                        apply_out(mob, ref, (physics_t - fo_start) / duration)
                     else:
                         mob.set_opacity(0)
                         
@@ -222,9 +229,8 @@ class PhyAnimationScene2D(Scene):
         container.add_updater(updater)
         return container
 
-    def construct(self) -> None:
-        tracker = ValueTracker(0.0)
-        #================================物理实体开始================================    
+    def add_entities(self, tracker: ValueTracker):
+                #================================物理实体开始================================    
         # 给mobject添加更新器
         for obj_id, obj in self.animation.objects.items():
             if obj.mobject is None:
@@ -273,10 +279,13 @@ class PhyAnimationScene2D(Scene):
             self.add(group_container)
 
 
+    def construct(self) -> None:
+        tracker = ValueTracker(0.0)
+        self.add_entities(tracker)
 
         self.play(
-            tracker.animate.set_value(self.ctx.total_time),
-            run_time=self.ctx.total_time,
+            tracker.animate.set_value(self.physics_ctx.total_time),
+            run_time=self.physics_ctx.total_time,
             rate_func=linear,
         )
 
@@ -285,5 +294,35 @@ class PhyAnimationScene2D(Scene):
                 obj.mobject.clear_updaters()
 
 
+from phyanim.core.context import Context
+class PhyAnimationMultiLayerScene2D(PhyAnimationScene2D):
 
-   
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.contexts: list[Context] = []
+    
+    def set_animation(self, animation: PhyAnimation):
+        # physics obj、annotation、transition都在同一个本征时间layer上
+        super().set_animation(animation)
+        # 构建渲染上下文
+        self.contexts.append(self.physics_ctx)
+        self.contexts.append(self.anno_ctx)
+        self.contexts.append(self.transition_ctx)
+        self.contexts.append(self.time_wrapper_ctx)
+
+        for ctx in self.contexts:
+            ctx.set_time_mapping_to_physics(self.time_wrapper_ctx.time_mapping_func)
+
+
+    def construct(self) -> None:
+        # 主渲染器
+        render_tracker = ValueTracker(0.0)
+        max_time = max([ctx.total_time for ctx in self.contexts])
+
+        self.add_entities(render_tracker)
+
+        self.play(
+            render_tracker.animate.set_value(max_time),
+            run_time=max_time,
+            rate_func=linear,
+        )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from phyanim.core.context import AnimationContext, AnnotationContext, TransitionContext
+from phyanim.core.context import PhysicsContext, AnnotationContext, TransitionContext, TimeWrapperContext
 from phyanim.core.events import PhysicsEvent
 from phyanim.core.keyframe import PhysicsKeyFrame
 from phyanim.core.objects import PhysicObject2D
@@ -10,9 +10,12 @@ from phyanim.core.segment import PhysicsSegment
 from phyanim.core.solution import SegmentResult
 from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
 from phyanim.solver.scipy_solver import ScipySegmentSolver
-from phyanim.core.annotation.annotation import Annotation, Transition
+from phyanim.core.enhance.annotation import Annotation
+from phyanim.core.enhance.transition import Transition
+from phyanim.core.enhance.timewrapper import TimeWrapper
 from phyanim.solver.annotation_solver import DefaultAnnotationSolver
 from phyanim.solver.transition_solver import DefaultTransitionSolver
+from phyanim.solver.timewrapper_solver import DefaultTimeWrapperSolver
 
 
 @dataclass
@@ -36,6 +39,9 @@ class PhysicsAnimation:
 
     # 过渡相关
     transitions: dict[str, Transition] = field(default_factory=dict)
+
+    # 时间缩放相关
+    time_wrappers: dict[str, TimeWrapper] = field(default_factory=dict)
 
     # 将object添加到动画中，initial_state必须在object.state_variables中定义
     def add_object(self, obj: PhysicObject2D, initial_state: dict[str, float]) -> None:
@@ -112,18 +118,25 @@ class PhysicsAnimation:
                 f"Transition '{transition}' id should not be None or empty"
             )
         self.transitions[transition.id] = transition
-
+    
+    def add_time_wrapper(self, time_wrapper: TimeWrapper) -> None:
+        if time_wrapper.id is None:
+            raise ValueError(
+                f"TimeWrapper '{time_wrapper}' id should not be None or empty"
+            )
+        self.time_wrappers[time_wrapper.id] = time_wrapper
 
     # 求解变量和注释
-    def solve(self, solver: ScipySegmentSolver, anno_solver: DefaultAnnotationSolver, transition_solver: DefaultTransitionSolver):
-        animation_ctx = self.solve_simulation(solver)
-        annotation_ctx = self.solve_annotation(anno_solver, animation_ctx)
-        transition_ctx = self.solve_transition(transition_solver, animation_ctx)
+    def solve(self, solver: ScipySegmentSolver, anno_solver: DefaultAnnotationSolver, transition_solver: DefaultTransitionSolver, time_wrapper_solver: DefaultTimeWrapperSolver):
+        physics_ctx = self.solve_simulation(solver)
+        annotation_ctx = self.solve_annotation(anno_solver, physics_ctx)
+        transition_ctx = self.solve_transition(transition_solver, physics_ctx)
+        time_wrapper_ctx = self.solve_time_wrapper(time_wrapper_solver, physics_ctx)
 
-        return animation_ctx, annotation_ctx, transition_ctx
+        return physics_ctx, annotation_ctx, transition_ctx, time_wrapper_ctx
 
     # initial_keyframe必须包含所有状态变量的初始值（必须强行保证，否则可能造成数据丢失）
-    def solve_simulation(self, solver: ScipySegmentSolver | None = None) -> AnimationContext:
+    def solve_simulation(self, solver: ScipySegmentSolver | None = None) -> PhysicsContext:
         if self.initial_keyframe is None:
             raise ValueError("PhysicsAnimation requires an initial keyframe before solving.")
         solver = solver or ScipySegmentSolver()
@@ -152,7 +165,7 @@ class PhysicsAnimation:
 
         self.solved = True
 
-        return AnimationContext(
+        return PhysicsContext(
                 self.build_state_functions(),
                 self.build_derived_functions(),
                 self.trajectories,
@@ -161,11 +174,14 @@ class PhysicsAnimation:
                 self.objects
             )
 
-    def solve_annotation(self, solver: DefaultAnnotationSolver | None = None, animation_ctx: AnimationContext | None = None) -> AnnotationContext:
-        return solver.solve(animation_ctx)
+    def solve_annotation(self, solver: DefaultAnnotationSolver | None = None, physics_ctx: PhysicsContext | None = None) -> AnnotationContext:
+        return solver.solve(physics_ctx)
 
-    def solve_transition(self, solver: DefaultTransitionSolver | None = None, animation_ctx: AnimationContext | None = None) -> TransitionContext:
-        return solver.solve(animation_ctx)
+    def solve_transition(self, solver: DefaultTransitionSolver | None = None, physics_ctx: PhysicsContext | None = None) -> TransitionContext:
+        return solver.solve(physics_ctx)
+
+    def solve_time_wrapper(self, solver: DefaultTimeWrapperSolver | None = None, physics_ctx: PhysicsContext | None = None) -> TimeWrapperContext:
+        return solver.solve(physics_ctx)
 
     def _segment_parameters(self, segment: PhysicsSegment) -> dict[str, float]:
         parameters = segment.merged_parameters(self.global_parameters)

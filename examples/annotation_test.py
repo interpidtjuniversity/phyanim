@@ -13,8 +13,8 @@ from phyanim.core.state import StateVariable
 from phyanim.core.objects import PhysicObject2D
 from phyanim.core.entity.TwoD import Spring
 
-from phyanim.core.annotation.annotation import Annotation, AnnotationActivation, Trigger, CrossingTrigger, Transition
-from phyanim.core.annotation.asserts import ArrowContent, MathTexContent, TextContent, TransitionContent
+from phyanim.core.enhance.annotation import Annotation, AnnotationActivation, Trigger, CrossingTrigger, Transition
+from phyanim.core.enhance.asserts import ArrowContent, MathTexContent, TextContent, TransitionContent
 
 if __name__ == "__main__":
     # 弹簧劲度系数为 1N/m

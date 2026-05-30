@@ -1,16 +1,39 @@
-from typing import Tuple
+from typing import Tuple, Callable
 
 from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.expressions import CompiledExpression
 from phyanim.core.objects import PhysicObject2D
-from phyanim.core.annotation.annotation import Annotation, Trigger, CrossingTrigger, Transition
+from phyanim.core.enhance.annotation import Annotation
+from phyanim.core.enhance.trigger import CrossingTrigger, Trigger
+from phyanim.core.enhance.transition import Transition
 
 import sympy as sp
 
+class Context:
+
+    def __init__(self):
+        self.total_time: float | None = None
+        self.time_mapping_func: Callable[[float], float] | None = None
+
+    def set_time_mapping_to_physics(self, time_mapping_func: Callable[[float], float]):
+        self.time_mapping_func = time_mapping_func
+
+    # context会在渲染层接受一个渲染时刻，不同的context需要将其映射到不同的物理时间
+    def time_mapping_to_physics(self, t: float) -> float:
+        """将动画时间映射到物理时间。"""
+        if self.time_mapping_func is None:
+            """将动画时间映射到物理时间。"""
+            if t <= self.total_time:
+                return t
+            else:
+                return self.total_time
+        return self.time_mapping_func(t)
+
+
 # animation 上下文(求解后使用)
-class AnimationContext:
-    """求解后的动画上下文，管理整个动画中的变量。"""
+class PhysicsContext(Context):
+    """求解后的物理上下文，管理整个动画中的变量。"""
     """ 参数必须来自已经求解的animation """
     def __init__(
         self, 
@@ -50,6 +73,10 @@ class AnimationContext:
         self.cached_expressions = {}
 
         self.initialize_segment_parameters()
+
+    def get_context_time(self) -> float:
+        """将渲染时间映射到物理时间。"""
+        return self.total_time
 
     def initialize_segment_parameters(self):
         """初始化每个段的符号参数字典。"""
@@ -233,27 +260,29 @@ class AnimationContext:
 
 
 # 注释上下文，需要使用AnimationContext和annotationsolver来进行初始化
-class AnnotationContext:
+class AnnotationContext(Context):
     """注释上下文，管理整个动画的注释。"""
-    def __init__(self, annotations: dict[str, Annotation], timeline: dict[str, list[Tuple[float, float]]]):
+    def __init__(self, annotations: dict[str, Annotation], timeline: dict[str, list[Tuple[float, float]]], total_time: float):
         self.timeline = timeline
         self.annotations = annotations
+        self.total_time = total_time
 
         # 已经触发的注释字典，键为注释规格，值为触发时间列表（在渲染时使用，记录注释触发的次数等上下文）
         self.triggered_annotations = {}
 
-
-class TransitionContext:
+class TransitionContext(Context):
     """转换上下文，管理整个动画的转换。"""
-    def __init__(self, transitions: dict[str, Transition], timeline: dict[str, list[float]]):
+    def __init__(self, transitions: dict[str, Transition], timeline: dict[str, list[float]], total_time: float):
         self.transitions = transitions
         self.timeline = timeline
+        self.total_time = total_time
         
         self.triggered_transitions = {}
 
-        print(self.timeline)
+from phyanim.core.enhance.timewrapper import TimeWrapper
+class TimeWrapperContext(Context):
 
-
-                    
-                
-
+    def __init__(self, time_wrappers: dict[str, TimeWrapper], total_time: float, time_mapping_func: Callable[[float], float]):
+        self.time_wrappers = time_wrappers
+        self.total_time = total_time
+        self.time_mapping_func = time_mapping_func

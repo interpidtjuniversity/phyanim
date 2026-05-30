@@ -8,13 +8,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.events import time_countdown_event
-from phyanim.render import PhyAnimationScene2D
+from phyanim.render import PhyAnimationScene2D, PhyAnimationMultiLayerScene2D
 from phyanim.core.state import StateVariable
 from phyanim.core.objects import PhysicObject2D
 from phyanim.core.entity.TwoD import Spring
 from phyanim.core.events import PhysicsEvent, EventCondition, StateTransition
-from phyanim.core.annotation.asserts import ArrowContent, TextContent
-from phyanim.core.annotation.annotation import Annotation, AnnotationActivation, Trigger, CrossingTrigger, Transition
+from phyanim.core.enhance.annotation import ArrowContent, TextContent, Annotation, AnnotationActivation
+from phyanim.core.enhance.trigger import Trigger, CrossingTrigger
+from phyanim.core.enhance.transition import Transition
 
 
 from manim import Circle
@@ -252,7 +253,19 @@ if __name__ == "__main__":
         )
     )
 
-    scene = PhyAnimationScene2D()
+    from phyanim.core.enhance.timewrapper import TimeWrapper
+    # 碰撞前1秒到后1秒进行0.25倍慢放 2s的区间 -> 8s的区间
+    animation.add_time_wrapper(
+        TimeWrapper(
+            id="time_warp1",
+            trigger=CrossingTrigger(expression="ball1x - start_x", direction=1),
+            advance=1,
+            delay=1,
+            speed=0.25,
+        )
+    )
+
+    scene = PhyAnimationMultiLayerScene2D()
     # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)
     scene.render()
