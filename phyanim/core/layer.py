@@ -21,7 +21,9 @@ class Layer:
         self.id = id
         self.annotations : dict[str, Annotation] = {}
         self.transitions : dict[str, Transition] = {}
-        self.contexts: list[Context] = [] # 包含物理_ctx、注_ctx、转_ctx
+
+        # 可以后续在layer层继续加入其它context
+        self.contexts: list[Context] = []
 
     def add_annotation(self, annotation: Annotation) -> None:
         if annotation.id is None:
@@ -39,6 +41,7 @@ class Layer:
 
     def solve(self, physics_ctx: PhysicsContext) -> None:
         # 求解展示层的东西
+        self.contexts.clear()
         self.solve_annotation(physics_ctx)
         self.solve_transition(physics_ctx)
     
@@ -49,8 +52,8 @@ class Layer:
         self.contexts.append(DefaultTransitionSolver(transitions=self.transitions).solve(physics_ctx))
 
     def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
-        """获取layer中的实体"""
-        # physics_ctx 这里会重复添加，但是不影响渲染
+        """获取展示层中的实体，例如 annotations、transitions、analysis items。"""
+        # physics_ctx 的实体不在这里添加
         entities = []
         for ctx in self.contexts:
             entities.extend(ctx.get_entities(tracker))

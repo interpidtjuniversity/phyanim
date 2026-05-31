@@ -26,14 +26,13 @@ class PhyAnimationMultiLayerScene2D(Scene):
     def set_animation(self, animation: PhysicsAnimation) -> None:
         """注册一个PhysicsAnimation。"""
         self.animation = animation
-        self.animation.solve()
     
     def add_time_wrapper(self, time_wrapper: TimeWrapper) -> None:
         self.timeline.add_time_wrapper(time_wrapper)
 
     def construct(self) -> None:
         if not self.animation.solved:
-            raise ValueError("Animation must be solved before rendering.")
+            self.animation.solve()
         
         # 主渲染器
         render_tracker = ValueTracker(0.0)
