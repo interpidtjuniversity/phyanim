@@ -81,9 +81,9 @@ if __name__ == "__main__":
         ),
         end_event=time_countdown_event(5),
     )
-    main_layer = animation.create_layer(layer_id="id")
+    physics_layer = animation.get_physics_layer()
 
-    main_layer.add_annotation(
+    physics_layer.add_annotation(
         Annotation(
             id="anno1",
             ann_type="while",
@@ -91,7 +91,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=Trigger(expression="t > 2")),
         )
     )
-    main_layer.add_annotation(
+    physics_layer.add_annotation(
         Annotation(
             id="anno2",
             ann_type="between",
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(start_trigger=CrossingTrigger(expression="t-3", direction=1), end_trigger=CrossingTrigger(expression="t-6", direction=1)),
         )
     )
-    main_layer.add_annotation(
+    physics_layer.add_annotation(
         Annotation(
             id="anno3",
             ann_type="time_range",
@@ -107,7 +107,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=CrossingTrigger(expression="t - 5", direction=1), advance=1, delay=1),
         )
     )
-    main_layer.add_annotation(
+    physics_layer.add_annotation(
         Annotation(
             id="vector_arrow",
             ann_type="while",
@@ -122,7 +122,7 @@ if __name__ == "__main__":
         "slide_down"  — 下滑出 / 上滑入
         "spin"        — 旋转缩放出 / 旋转放大入
     """
-    main_layer.add_transition(
+    physics_layer.add_transition(
         Transition(
             id="formula_derivation",
             group_strings=[["a=1","b=2","c=3","d=4"],["a+b=3", "c+d=7", "a+b+c+d=10"]], 

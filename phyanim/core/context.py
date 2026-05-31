@@ -15,11 +15,11 @@ from phyanim.utils.util import is_numeric
 
 class Context:
 
-    def __init__(self):
-        self.time_mapping_func: Callable[[float], float] | None = None
+    def set_render_to_physics_mapping_func(self, func: Callable[[float], float]):
+        self.render_to_physics_mapping_func = func
 
-    def set_time_mapping_to_physics(self, func: Callable[[float], float]):
-        self.time_mapping_func = func
+    def set_physics_to_render_mapping_func(self, func: Callable[[float], float]):
+        self.physics_to_render_mapping_func = func
 
     def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
         raise NotImplementedError("add_entities must be implemented in subclasses.")
@@ -297,7 +297,7 @@ class PhysicsContext(Context):
     ):
         def updater(m):
             t = tracker.get_value()
-            physics_t = self.time_mapping_func(t)
+            physics_t = self.render_to_physics_mapping_func(t)
             cartesian_positions = self.eval_position(current_obj_id, physics_t)
 
             if len(cartesian_positions) == 1:
@@ -321,7 +321,8 @@ class AnnotationContext(Context):
         timeline: dict[str, list[Tuple[float, float]]], 
         value_at_time: Callable[[str, float], float],
         eval_expr: Callable[[str, str, float], float],
-        build_eval_exper_func: Callable[[Trigger], callable]
+        build_eval_exper_func: Callable[[Trigger], callable],
+        name_space: str
     ):
         super().__init__()
         self.timeline = timeline
@@ -329,6 +330,7 @@ class AnnotationContext(Context):
         self.value_at_time = value_at_time
         self.eval_expr = eval_expr
         self.build_eval_exper_func = build_eval_exper_func
+        self.name_space = name_space
 
         # 已经触发的注释字典，键为注释规格，值为触发时间列表（在渲染时使用，记录注释触发的次数等上下文）
         self.triggered_annotations = {}
@@ -342,10 +344,13 @@ class AnnotationContext(Context):
     ):
         def updater(m):
             t = tracker.get_value()
-            physics_t = self.time_mapping_func(t)
+            if self.name_space == "physics":
+                t = self.render_to_physics_mapping_func(t)
+            elif self.name_space == "render":
+                t = t
                 
             timeline = self.timeline.get(anno_id, [])
-            visible = any(start <= physics_t <= end for start, end in timeline)
+            visible = any(start <= t <= end for start, end in timeline)
             m.set_opacity(1.0 if visible else 0.0)
 
             if not visible:
@@ -355,11 +360,11 @@ class AnnotationContext(Context):
 
             x_pos_value, y_pos_value = None, None
             if not is_numeric(x_pos_name):
-                x_pos_value = self.value_at_time(x_pos_name, physics_t)
+                x_pos_value = self.value_at_time(x_pos_name, t)
             else:
                 x_pos_value = float(x_pos_name)
             if not is_numeric(y_pos_name):
-                y_pos_value = self.value_at_time(y_pos_name, physics_t)
+                y_pos_value = self.value_at_time(y_pos_name, t)
             else:
                 y_pos_value = float(y_pos_name)
 
@@ -367,11 +372,11 @@ class AnnotationContext(Context):
                 x_shift_name, y_shift_name = content.shift_variables
                 x_shift_value, y_shift_value = None, None
                 if not is_numeric(x_shift_name):
-                    x_shift_value = self.value_at_time(x_shift_name, physics_t)
+                    x_shift_value = self.value_at_time(x_shift_name, t)
                 else:
                     x_shift_value = float(x_shift_name)
                 if not is_numeric(y_shift_name):
-                    y_shift_value = self.value_at_time(y_shift_name, physics_t)
+                    y_shift_value = self.value_at_time(y_shift_name, t)
                 else:
                     y_shift_value = float(y_shift_name)
                 callback(x_pos_value, y_pos_value, x_shift_value, y_shift_value)
@@ -400,7 +405,8 @@ class TransitionContext(Context):
         timeline: dict[str, list[float]], 
         value_at_time: Callable[[str, float], float],
         eval_expr: Callable[[str, str, float], float],
-        build_eval_exper_func: Callable[[Trigger], callable]
+        build_eval_exper_func: Callable[[Trigger], callable],
+        name_space: str
     ):
         super().__init__()
         self.transitions = transitions
@@ -410,6 +416,7 @@ class TransitionContext(Context):
         self.value_at_time = value_at_time
         self.eval_expr = eval_expr
         self.build_eval_exper_func = build_eval_exper_func
+        self.name_space = name_space
 
     def make_sequential(self, transition, groups, times, tracker, style="scale", duration=0.5, smooth_func : Callable[[float], float] = lambda x: x * x * (3 - 2 * x)):
         """
@@ -471,17 +478,20 @@ class TransitionContext(Context):
         # 这里m是最大的那个group(group1(str1,str2), group2(str3,str4,str5,str6))
         def updater(m):
             t = tracker.get_value()
-            physics_t = self.time_mapping_func(t)
+            if self.name_space == "physics":
+                t = self.render_to_physics_mapping_func(t)
+            elif self.name_space == "render":
+                t = t
             
             x_pos_name, y_pos_name = transition.content.pos_variables
 
             x_pos_value, y_pos_value = None, None
             if not is_numeric(x_pos_name):
-                x_pos_value = self.value_at_time(x_pos_name, physics_t)
+                x_pos_value = self.value_at_time(x_pos_name, t)
             else:
                 x_pos_value = float(x_pos_name)
             if not is_numeric(y_pos_name):
-                y_pos_value = self.value_at_time(y_pos_name, physics_t)
+                y_pos_value = self.value_at_time(y_pos_name, t)
             else:
                 y_pos_value = float(y_pos_name)
 
@@ -505,26 +515,26 @@ class TransitionContext(Context):
                 # 处理区间重合的几种情况
                 # 如果完全出现的时刻等于完全消失的时刻，则设置从fi_start到fo_end的先显示再消失
                 if fo_start <= fi_end and fi_end <= fo_end:
-                    if physics_t < fi_start:
+                    if t < fi_start:
                         mob.set_opacity(0)
-                    elif physics_t <= fo_end:
+                    elif t <= fo_end:
                         # 一半的duration用来出现，一半用来消失
                         span = (fo_end + fi_start) / 2
-                        if physics_t <= span:
-                            apply_in(mob, ref, (physics_t - fi_start) / (span - fi_start))
+                        if t <= span:
+                            apply_in(mob, ref, (t - fi_start) / (span - fi_start))
                         else:
-                            apply_out(mob, ref, (physics_t - span) / (fo_end - span))
+                            apply_out(mob, ref, (t - span) / (fo_end - span))
                     else:
                         mob.set_opacity(0)
                 elif fi_end < fo_start:
-                    if physics_t < fi_start:
+                    if t < fi_start:
                         mob.set_opacity(0)
-                    elif physics_t <= fi_end:
-                        apply_in(mob, ref, (physics_t - fi_start) / duration)
-                    elif physics_t < fo_start:
+                    elif t <= fi_end:
+                        apply_in(mob, ref, (t - fi_start) / duration)
+                    elif t < fo_start:
                         mob.set_opacity(1)
-                    elif physics_t <= fo_end:
-                        apply_out(mob, ref, (physics_t - fo_start) / duration)
+                    elif t <= fo_end:
+                        apply_out(mob, ref, (t - fo_start) / duration)
                     else:
                         mob.set_opacity(0)
                         

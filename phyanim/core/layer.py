@@ -14,11 +14,13 @@ class Layer:
 
     def __init__(
         self,
-        id: str = None
+        id: str = None,
+        name_space: str = None
     ):
-        if id is None:
-            raise ValueError("id must be provided")
+        if id is None or name_space is None:
+            raise ValueError("id and name_space must be provided")
         self.id = id
+        self.name_space = name_space
         self.annotations : dict[str, Annotation] = {}
         self.transitions : dict[str, Transition] = {}
 
@@ -46,10 +48,10 @@ class Layer:
         self.solve_transition(physics_ctx)
     
     def solve_annotation(self, physics_ctx: PhysicsContext):
-        self.contexts.append(DefaultAnnotationSolver(annotations=self.annotations).solve(physics_ctx))
+        self.contexts.append(DefaultAnnotationSolver(annotations=self.annotations).solve(physics_ctx, self.name_space))
 
     def solve_transition(self, physics_ctx: PhysicsContext):
-        self.contexts.append(DefaultTransitionSolver(transitions=self.transitions).solve(physics_ctx))
+        self.contexts.append(DefaultTransitionSolver(transitions=self.transitions).solve(physics_ctx, self.name_space))
 
     def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
         """获取展示层中的实体，例如 annotations、transitions、analysis items。"""
@@ -59,6 +61,7 @@ class Layer:
             entities.extend(ctx.get_entities(tracker))
         return entities
 
-    def set_time_mapping_func(self, time_mapping_func: Callable[[float], float]) -> None:
+    def set_time_mapping_func(self, render_to_physics_mapping_func: Callable[[float], float], physics_to_render_mapping_func: Callable[[float], float]) -> None:
         for ctx in self.contexts:
-            ctx.set_time_mapping_to_physics(time_mapping_func)
+            ctx.set_render_to_physics_mapping_func(render_to_physics_mapping_func)
+            ctx.set_physics_to_render_mapping_func(physics_to_render_mapping_func)

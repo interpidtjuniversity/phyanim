@@ -36,18 +36,25 @@ class PhyAnimationMultiLayerScene2D(Scene):
         
         # 主渲染器
         render_tracker = ValueTracker(0.0)
-        total_time, time_mapping_func = self.timeline.solve(self.animation.physics_ctx)
+        total_time, render_to_physics_mapping_func, physics_to_render_mapping_func = self.timeline.solve(self.animation.physics_ctx)
         # 动画主体对象
         for obj in self.animation.physics_ctx.get_entities(render_tracker):
             self.add(obj)
 
-        for layer in self.animation.layers:
-            layer.solve(self.animation.physics_ctx)
-            layer.set_time_mapping_func(time_mapping_func)
-            # 这里会在context内部添加updater
-            entities = layer.get_entities(render_tracker)
-            for entity in entities:
-                self.add(entity)
+        # 添加展示层对象
+        physics_layer = self.animation.get_physics_layer()
+        physics_layer.solve(self.animation.physics_ctx)
+        physics_layer.set_time_mapping_func(render_to_physics_mapping_func, physics_to_render_mapping_func)
+        for entity in physics_layer.get_entities(render_tracker):
+            self.add(entity)
+
+        # 添加渲染层对象
+        render_layer = self.animation.get_render_layer()
+        render_layer.solve(self.animation.physics_ctx)
+        render_layer.set_time_mapping_func(render_to_physics_mapping_func, physics_to_render_mapping_func)
+        for entity in render_layer.get_entities(render_tracker):
+            self.add(entity)
+
 
         self.play(
             render_tracker.animate.set_value(total_time),

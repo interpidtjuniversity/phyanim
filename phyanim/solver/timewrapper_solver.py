@@ -11,7 +11,7 @@ class DefaultTimeWrapperSolver:
     total_time: float = None
     time_wrappers: dict[str, TimeWrapper] = field(default_factory=dict)
 
-    def solve(self, physics_ctx: PhysicsContext) -> Tuple[float, Callable[[float], float]] :
+    def solve(self, physics_ctx: PhysicsContext) -> Tuple[float, Callable[[float], float], Callable[[float], float]] :
         # 先评估触发器的触发时间
         old_time = None
         trigger_map = {}
@@ -57,7 +57,7 @@ class DefaultTimeWrapperSolver:
         total_time += (physics_ctx.total_time - last_physics_stop)
         self.total_time = total_time
 
-        def time_mapping_func(t: float) -> float:
+        def render_to_physics_mapping_func(t: float) -> float:
             # 查找t属于哪个wrapper_time_ranges的区间
             for idx, (wrapper_start, wrapper_end, _) in enumerate(self.wrapper_time_ranges):
                 if wrapper_start <= t <= wrapper_end:
@@ -78,5 +78,24 @@ class DefaultTimeWrapperSolver:
             else:
                 return self.time_ranges[left_wrapper_idx][1] + t - self.wrapper_time_ranges[left_wrapper_idx][1]
         
-        self.time_mapping_func = time_mapping_func
-        return self.total_time, self.time_mapping_func
+        def physics_to_render_mapping_func(t: float) -> float:
+            for idx, (start, end, _) in enumerate(self.time_ranges):
+                if start <= t <= end:
+                    return self.wrapper_time_ranges[idx][0] + (t - start) * (self.wrapper_time_ranges[idx][1] - self.wrapper_time_ranges[idx][0]) / (end - start)
+            
+            left_idx = -1
+            for left_wrapper_idx, (_, end, _) in enumerate(self.time_ranges):
+                if t > end:
+                    left_idx = left_wrapper_idx
+                else:
+                    break
+
+            # 没有左侧区间，直接返回
+            if left_idx == -1:
+                return t
+            else:
+                return self.wrapper_time_ranges[left_idx][1] + t - self.time_ranges[left_idx][1]
+
+        self.render_to_physics_mapping_func = render_to_physics_mapping_func
+        self.physics_to_render_mapping_func = physics_to_render_mapping_func
+        return self.total_time, self.render_to_physics_mapping_func, self.physics_to_render_mapping_func

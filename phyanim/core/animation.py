@@ -35,8 +35,9 @@ class PhysicsAnimation:
     solved: bool = False
     # 物理上下文
     physics_ctx: PhysicsContext = None
-    # 该动画的所有layer，共享同一个物理上下文
-    layers: list[Layer] = field(default_factory=list)
+    # physics_layer，它是physics_ctx的展示层
+    physics_layer: Layer | None = None
+    render_layer: Layer | None = None
 
     # 将object添加到动画中，initial_state必须在object.state_variables中定义
     def add_object(self, obj: PhysicObject2D, initial_state: dict[str, float]) -> None:
@@ -108,12 +109,17 @@ class PhysicsAnimation:
         else:
             raise ValueError(f"Unknown engine: {self.engine}. Supported engines are 'scipy' and 'heyoka'.")
 
-    def create_layer(self, layer_id: str = None) -> Layer:        
-        layer = Layer(
-            id=layer_id
-        )
-        self.layers.append(layer)
-        return layer
+    def get_physics_layer(self) -> Layer:     
+        if self.physics_layer is not None:
+            return self.physics_layer
+        self.physics_layer = Layer(id="physics_layer", name_space="physics")
+        return self.physics_layer
+
+    def get_render_layer(self) -> Layer:
+        if self.render_layer is not None:
+            return self.render_layer
+        self.render_layer = Layer(id="render_layer", name_space="render")
+        return self.render_layer
 
     # initial_keyframe必须包含所有状态变量的初始值（必须强行保证，否则可能造成数据丢失）
     def solve_simulation(self, solver: Solver | None = None) -> PhysicsContext:
