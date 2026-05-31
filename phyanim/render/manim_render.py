@@ -2,84 +2,56 @@ from __future__ import annotations
 
 from manim import Scene, ValueTracker, linear
 
-
-
 from phyanim.core.animation import PhysicsAnimation
-from phyanim.solver import HeyokaSegmentSolver
-from phyanim.solver.annotation_solver import DefaultAnnotationSolver
-from phyanim.solver.transition_solver import DefaultTransitionSolver
-from phyanim.solver.timewrapper_solver import DefaultTimeWrapperSolver
 
-class PhyAnimationScene2D(Scene):
+from phyanim.core.layer import Layer
+        # for obj in self.animation.objects.values():
+        #     if obj.mobject is not None:
+        #         obj.mobject.clear_updaters()
+
+from phyanim.core.timeline import Timeline
+from phyanim.core.enhance.timewrapper import TimeWrapper
+
+class PhyAnimationMultiLayerScene2D(Scene):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.layers: list[Layer] = []
+        self.timeline = Timeline()
 
-    def set_animation(self, animation: PhysicsAnimation) -> None:
-        """注册一个PhysicsAnimation。"""
-        self.animation = animation
-        # 变量管理上下文
-        # 注释管理上下文
-        self.main_layer = animation.solve(
-            HeyokaSegmentSolver(sample_dt=1/20), 
-            DefaultAnnotationSolver(annotations=self.animation.annotations), 
-            DefaultTransitionSolver(transitions=self.animation.transitions),
-            DefaultTimeWrapperSolver(time_wrappers=self.animation.time_wrappers)
-        )
-    
     def set_frame_size(self, width: float, height: float) -> None:
         self.frame_width = width
         self.frame_height = height
 
+    def set_animation(self, animation: PhysicsAnimation) -> None:
+        """注册一个PhysicsAnimation。"""
+        self.animation = animation
+        self.animation.solve()
+    
+    def add_time_wrapper(self, time_wrapper: TimeWrapper) -> None:
+        self.timeline.add_time_wrapper(time_wrapper)
+
     def construct(self) -> None:
-        tracker = ValueTracker(0.0)
+        if not self.animation.solved:
+            raise ValueError("Animation must be solved before rendering.")
+        
+        # 主渲染器
+        render_tracker = ValueTracker(0.0)
+        total_time, time_mapping_func = self.timeline.solve(self.animation.physics_ctx)
+        # 动画主体对象
+        for obj in self.animation.physics_ctx.get_entities(render_tracker):
+            self.add(obj)
 
-
-        for ctx in self.main_layer.contexts:
-            ctx_entities = ctx.get_entities(tracker)
-            for entity in ctx_entities:
+        for layer in self.animation.layers:
+            layer.solve(self.animation.physics_ctx)
+            layer.set_time_mapping_func(time_mapping_func)
+            # 这里会在context内部添加updater
+            entities = layer.get_entities(render_tracker)
+            for entity in entities:
                 self.add(entity)
 
         self.play(
-            tracker.animate.set_value(self.main_layer.total_time),
-            run_time=self.main_layer.total_time,
-            rate_func=linear,
-        )
-
-        for obj in self.animation.objects.values():
-            if obj.mobject is not None:
-                obj.mobject.clear_updaters()
-
-
-from phyanim.core.context import Context
-class PhyAnimationMultiLayerScene2D(PhyAnimationScene2D):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.contexts: list[Context] = []
-    
-    def set_animation(self, animation: PhyAnimation):
-        # physics obj、annotation、transition都在同一个本征时间layer上
-        super().set_animation(animation)
-        # 构建渲染上下文
-        self.contexts.append(self.physics_ctx)
-        self.contexts.append(self.anno_ctx)
-        self.contexts.append(self.transition_ctx)
-        self.contexts.append(self.time_wrapper_ctx)
-
-        for ctx in self.contexts:
-            ctx.set_time_mapping_to_physics(self.time_wrapper_ctx.time_mapping_func)
-
-
-    def construct(self) -> None:
-        # 主渲染器
-        render_tracker = ValueTracker(0.0)
-        max_time = max([ctx.total_time for ctx in self.contexts])
-
-        self.add_entities(render_tracker)
-
-        self.play(
-            render_tracker.animate.set_value(max_time),
-            run_time=max_time,
+            render_tracker.animate.set_value(total_time),
+            run_time=total_time,
             rate_func=linear,
         )

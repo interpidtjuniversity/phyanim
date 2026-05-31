@@ -79,5 +79,4 @@ class DefaultTimeWrapperSolver:
                 return self.time_ranges[left_wrapper_idx][1] + t - self.wrapper_time_ranges[left_wrapper_idx][1]
         
         self.time_mapping_func = time_mapping_func
-        
         return self.total_time, self.time_mapping_func

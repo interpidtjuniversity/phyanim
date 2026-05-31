@@ -8,13 +8,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.events import time_countdown_event
-from phyanim.render import PhyAnimationScene2D
+from phyanim.render import PhyAnimationMultiLayerScene2D
 from phyanim.core.state import StateVariable
 from phyanim.core.objects import PhysicObject2D
 from phyanim.core.entity.TwoD import Spring
 
-from phyanim.core.enhance.annotation import Annotation, AnnotationActivation, Trigger, CrossingTrigger, Transition
-from phyanim.core.enhance.asserts import ArrowContent, MathTexContent, TextContent, TransitionContent
+from phyanim.core.enhance.annotation import Annotation, AnnotationActivation
+from phyanim.core.enhance.trigger import CrossingTrigger, Trigger
+from phyanim.core.enhance.transition import Transition
+from phyanim.core.enhance.annotation import ArrowContent, TextContent
 
 if __name__ == "__main__":
     # 弹簧劲度系数为 1N/m
@@ -79,8 +81,9 @@ if __name__ == "__main__":
         ),
         end_event=time_countdown_event(5),
     )
+    main_layer = animation.create_layer(layer_id="id")
 
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="anno1",
             ann_type="while",
@@ -88,7 +91,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=Trigger(expression="t > 2")),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="anno2",
             ann_type="between",
@@ -96,7 +99,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(start_trigger=CrossingTrigger(expression="t-3", direction=1), end_trigger=CrossingTrigger(expression="t-6", direction=1)),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="anno3",
             ann_type="time_range",
@@ -104,7 +107,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=CrossingTrigger(expression="t - 5", direction=1), advance=1, delay=1),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="vector_arrow",
             ann_type="while",
@@ -119,7 +122,7 @@ if __name__ == "__main__":
         "slide_down"  — 下滑出 / 上滑入
         "spin"        — 旋转缩放出 / 旋转放大入
     """
-    animation.add_transition(
+    main_layer.add_transition(
         Transition(
             id="formula_derivation",
             group_strings=[["a=1","b=2","c=3","d=4"],["a+b=3", "c+d=7", "a+b+c+d=10"]], 
@@ -131,7 +134,7 @@ if __name__ == "__main__":
         )
     )
     
-    scene = PhyAnimationScene2D()
+    scene = PhyAnimationMultiLayerScene2D()
     # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)
     scene.render()

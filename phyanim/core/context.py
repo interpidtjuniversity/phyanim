@@ -18,8 +18,8 @@ class Context:
     def __init__(self):
         self.time_mapping_func: Callable[[float], float] | None = None
 
-    def set_time_mapping_to_physics(self, time_mapping_func: Callable[[float], float]):
-        self.time_mapping_func = time_mapping_func
+    def set_time_mapping_to_physics(self, func: Callable[[float], float]):
+        self.time_mapping_func = func
 
     def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
         raise NotImplementedError("add_entities must be implemented in subclasses.")
@@ -39,6 +39,7 @@ class PhysicsContext(Context):
         objects: dict[str, PhysicObject2D]
         ):
 
+        super().__init__()
         self.state_funcs = state_funcs
         self.derived_funcs = derived_funcs
         self.trajectories = trajectories
@@ -322,6 +323,7 @@ class AnnotationContext(Context):
         eval_expr: Callable[[str, str, float], float],
         build_eval_exper_func: Callable[[Trigger], callable]
     ):
+        super().__init__()
         self.timeline = timeline
         self.annotations = annotations
         self.value_at_time = value_at_time
@@ -400,6 +402,7 @@ class TransitionContext(Context):
         eval_expr: Callable[[str, str, float], float],
         build_eval_exper_func: Callable[[Trigger], callable]
     ):
+        super().__init__()
         self.transitions = transitions
         self.timeline = timeline
         
@@ -539,13 +542,3 @@ class TransitionContext(Context):
             group_container = self.make_sequential(transition, groups, self.timeline[trans_id], tracker, transition.style, transition.duration, transition.smooth_func)
             entities.append(group_container)
         return entities
-
-
-
-from phyanim.core.enhance.timewrapper import TimeWrapper
-class TimeWrapperContext(Context):
-
-    def __init__(self, time_wrappers: dict[str, TimeWrapper], total_time: float, time_mapping_func: Callable[[float], float]):
-        self.time_wrappers = time_wrappers
-        self.total_time = total_time
-        self.time_mapping_func = time_mapping_func

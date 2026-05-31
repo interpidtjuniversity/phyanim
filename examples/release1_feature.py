@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.events import time_countdown_event
-from phyanim.render import PhyAnimationScene2D, PhyAnimationMultiLayerScene2D
+from phyanim.render import PhyAnimationMultiLayerScene2D
 from phyanim.core.state import StateVariable
 from phyanim.core.objects import PhysicObject2D
 from phyanim.core.entity.TwoD import Spring
@@ -16,6 +16,7 @@ from phyanim.core.events import PhysicsEvent, EventCondition, StateTransition
 from phyanim.core.enhance.annotation import ArrowContent, TextContent, Annotation, AnnotationActivation
 from phyanim.core.enhance.trigger import Trigger, CrossingTrigger
 from phyanim.core.enhance.transition import Transition
+from phyanim.core.enhance.timewrapper import TimeWrapper
 
 
 from manim import Circle
@@ -168,8 +169,9 @@ if __name__ == "__main__":
         ),
         end_event=event3,
     )
+    main_layer = animation.create_layer(layer_id="id")
 
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="ball1_v_arrow",
             ann_type="while",
@@ -177,7 +179,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=Trigger(expression="t > 0")),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="ball1_v_label",
             ann_type="while",
@@ -185,7 +187,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=Trigger(expression="t > 0")),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="ball2_v_arrow",
             ann_type="while",
@@ -193,7 +195,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=Trigger(expression="t > 0")),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="ball2_v_label",
             ann_type="while",
@@ -202,7 +204,7 @@ if __name__ == "__main__":
         )
     )
 
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="spring_compress",
             ann_type="between",
@@ -210,7 +212,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(start_trigger=CrossingTrigger(expression="ball1x - start_x", direction=1), end_trigger=CrossingTrigger(expression="ball2x - ball1x - 2", direction=1)),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="time_range1",
             ann_type="time_range",
@@ -218,7 +220,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=CrossingTrigger(expression="ball1x - start_x", direction=1), advance=2, delay=0),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="time_range2",
             ann_type="time_range",
@@ -226,7 +228,7 @@ if __name__ == "__main__":
             activation=AnnotationActivation(trigger=CrossingTrigger(expression="ball2x - ball1x - 2", direction=1), advance=1, delay=0),
         )
     )
-    animation.add_annotation(
+    main_layer.add_annotation(
         Annotation(
             id="time_range3",
             ann_type="time_range",
@@ -241,7 +243,7 @@ if __name__ == "__main__":
         "slide_down"  — 下滑出 / 上滑入
         "spin"        — 旋转缩放出 / 旋转放大入
     """
-    animation.add_transition(
+    main_layer.add_transition(
         Transition(
             id="formula_derivation",
             group_strings=[["m_{1}v_{1}+m_{2}v_{2}=m_{1}v_{1}'+m_{2}v_{2}'", "\\frac{1}{2}m_{1}v_{1}^2+\\frac{1}{2}m_{2}v_{2}^2=\\frac{1}{2}m_{1}{v_{1}'}^{2}+\\frac{1}{2}m_{2}{v_{2}'}^{2}", "m_{1}=2kg, m_{2}=1kg", "v_{1}=1m/s, v_{2}=0"],["v_{1}'=\\frac{1}{3}m/s", "v_{2}'=\\frac{4}{3}m/s"]], 
@@ -253,9 +255,8 @@ if __name__ == "__main__":
         )
     )
 
-    from phyanim.core.enhance.timewrapper import TimeWrapper
-    # 碰撞前1秒到后1秒进行0.25倍慢放 2s的区间 -> 8s的区间
-    animation.add_time_wrapper(
+    scene = PhyAnimationMultiLayerScene2D()
+    scene.add_time_wrapper(
         TimeWrapper(
             id="time_warp1",
             trigger=CrossingTrigger(expression="ball1x - start_x", direction=1),
@@ -264,8 +265,6 @@ if __name__ == "__main__":
             speed=0.25,
         )
     )
-
-    scene = PhyAnimationScene2D()
-    # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)
+    # scene.set_frame_size(width=1000, height=1000)
     scene.render()

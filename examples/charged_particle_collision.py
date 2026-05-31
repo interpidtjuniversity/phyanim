@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.events import PhysicsEvent, time_countdown_event
-from phyanim.render import PhyAnimationScene2D
+from phyanim.render import PhyAnimationMultiLayerScene2D
 from phyanim.core.objects import PointParticle
 from phyanim.core.events import EventCondition, StateTransition
 
@@ -97,8 +97,7 @@ if __name__ == "__main__":
         ),
         end_event=time_countdown_event(5),
     )
-
-    scene = PhyAnimationScene2D()
+    scene = PhyAnimationMultiLayerScene2D()
     # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)
     scene.render()

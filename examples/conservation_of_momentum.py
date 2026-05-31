@@ -9,8 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.events import time_countdown_event
-from phyanim.render import PhyAnimationScene2D
-from phyanim.solver import ScipySegmentSolver, HeyokaSegmentSolver
+from phyanim.render import PhyAnimationMultiLayerScene2D
 from phyanim.core.objects import PointParticle
 from phyanim.core.state import StateVariable
 from phyanim.core.objects import PhysicObject2D
@@ -104,8 +103,7 @@ if __name__ == "__main__":
     # 求解
     # animation.solve(ScipySegmentSolver(sample_dt=1 / 30))
     # animation.solve(HeyokaSegmentSolver(sample_dt=1/20))
-
-    scene = PhyAnimationScene2D()
+    scene = PhyAnimationMultiLayerScene2D()
     # scene.set_frame_size(width=1000, height=1000)
     scene.set_animation(animation)
     scene.render()
