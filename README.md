@@ -23,8 +23,8 @@
 |:---:|
 | [![spring_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.mp4) | [!
 | *支持公式展示，向量标注，文本标注，以及跟随移动* |
-### 🪡🪡 physics&&render双线渲染线，physics线可暂停或缩放
-| 弹性碰撞求解| 霍尔效应|
+### physics🪡&&render🪡双线渲染线，physics线可暂停或缩放
+| 弹性碰撞求解标注| 霍尔效应|
 |:---:|:---:|
-| [![spring_collision](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.mp4) | [![spring_pendulum](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/hall_effect.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/hall_effect.mp4) | [!
+| [![release1_feature](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/release1_feature.mp4) | [![hall_effect](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/hall_effect.gif)](https://physic-video.oss-cn-beijing.aliyuncs.com/phyanim/1080p60/hall_effect.mp4) | [!
 | *冻结碰撞瞬间并添加额外标注文本* |*瞬时受力分析*| 
