@@ -256,34 +256,33 @@ if __name__ == "__main__":
     )
 
     render_layer = animation.get_render_layer()
-    render_layer.add_annotation(
-        Annotation(
-            id="spring_label",
-            ann_type="while",
-            content=TextContent(txt="这个是layer层的文本，暂停6秒后显示", pos_variables=("0", "2.5")),
-            activation=AnnotationActivation(trigger=Trigger(expression="local_t > 6")),
-        )
+    render_layer.add_sub_animation(
+        # 将碰撞瞬间冻结5s
+        time_wrapper=TimeWrapper(
+            id="time_warp",
+            type="freeze",
+            trigger=CrossingTrigger(expression="ball1x - start_x", direction=1),
+            extend_to=5
+        ), 
+        # 在这额外的5s内显示如下内容
+        annotations=[
+            Annotation(
+                id="freeze_label1",
+                ann_type="while",
+                content=TextContent(txt="这个是layer层的文本，冻结1s后显示", pos_variables=("0", "2.5")),
+                activation=AnnotationActivation(trigger=Trigger(expression="local_t > 1")),
+            ),
+            Annotation(
+                id="freeze_label2",
+                ann_type="while",
+                content=TextContent(txt="这个是layer层的文本，冻结3s后显示", pos_variables=("0", "3")),
+                activation=AnnotationActivation(trigger=Trigger(expression="local_t > 3")),
+            )
+        ],
+
     )
 
     scene = PhyAnimationMultiLayerScene2D()
-    # scene.add_time_wrapper(
-    #     TimeWrapper(
-    #         id="time_warp1",
-    #         type="slow",
-    #         trigger=CrossingTrigger(expression="ball1x - start_x", direction=1),
-    #         advance=1,
-    #         delay=1,
-    #         speed=0.25,
-    #     )
-    # )
-    scene.add_time_wrapper(
-        TimeWrapper(
-            id="time_warp2",
-            type="freeze",
-            trigger=CrossingTrigger(expression="ball1x - start_x", direction=1),
-            extend_to=10
-        )
-    )
     scene.set_animation(animation)
     # scene.set_frame_size(width=1000, height=1000)
     scene.render()

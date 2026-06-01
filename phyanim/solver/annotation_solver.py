@@ -17,12 +17,6 @@ class DefaultAnnotationSolver(ContentSolver):
     annotations: dict[str, Annotation] = field(default_factory=dict)
     sample_dt: float = 1/60
 
-    def solve(self, physics_ctx: PhysicsContext, name_space: str, time_wrapper_ranges: list[tuple[float, float, str]]) -> AnnotationContext:
-        if name_space == "physics":
-            return self.solve_physics(physics_ctx)
-        elif name_space == "render":
-            return self.solve_render(physics_ctx, time_wrapper_ranges)
-
     def solve_physics(self, physics_ctx: PhysicsContext) -> AnnotationContext:
         start_map = {}
         time_map = {}
@@ -88,7 +82,7 @@ class DefaultAnnotationSolver(ContentSolver):
         return AnnotationContext(self.annotations, self.timeline, physics_ctx.value_at_time, physics_ctx.eval_expr, physics_ctx.build_eval_exper_func, "physics")
         
 
-    def solve_render(self, physics_ctx: PhysicsContext, time_wrapper_ranges: list[tuple[float, float, str]]) -> AnnotationContext:
+    def solve_render(self, physics_ctx: PhysicsContext, time_wrapper_ranges: list[tuple[float, float, str]], render_range_map: dict[str, dict[str, tuple[float, float]]], annotation_belongs_map: dict[str, str]) -> AnnotationContext:
         start_map = {}
         time_map = {}
 
@@ -104,22 +98,26 @@ class DefaultAnnotationSolver(ContentSolver):
             physics_t = physics_ctx.render_to_physics_mapping_func(render_t)
             # 评估某个事件是否已经开始
             for annotation_id, annotation in self.annotations.items():
+                wrapper_id = annotation_belongs_map[annotation_id]
+                render_range = render_range_map[wrapper_id]["render_range"]
 
                 if isinstance(annotation.rule, ActiveWhile):
                     eval_result = self.render_eval_expr(annotation.rule.trigger.expression, "bool", physics_t, render_t, physics_ctx, time_wrapper_ranges)
-                    # 事件还没开始，就评估事件是否开始
-                    if annotation_id not in start_map:
-                        # 事件已经开始，标记开始时间
-                        if eval_result:
-                            start_map[annotation_id] = render_t
-                    # 事件已经开始，就评估事件是否结束
-                    else:
-                        # 事件已经结束，标记结束时间
-                        if not eval_result:
-                            self.timeline.setdefault(annotation_id, []).append(
-                                (start_map[annotation_id], render_t)
-                            )
-                            start_map.pop(annotation_id)
+                    # 事件还没开始，就在对应wrapper区间内评估事件是否开始
+                    if render_range[0] <= render_t <= render_range[1]:
+
+                        if annotation_id not in start_map:
+                            # 事件已经开始，标记开始时间
+                            if eval_result:
+                                start_map[annotation_id] = render_t
+                        # 事件已经开始，就评估事件是否结束
+                        else:
+                            # 事件已经结束，标记结束时间
+                            if not eval_result:
+                                self.timeline.setdefault(annotation_id, []).append(
+                                    (start_map[annotation_id], render_t)
+                                )
+                                start_map.pop(annotation_id)
                 
                 elif isinstance(annotation.rule, ActivateEventTimeRange):
                     # 如果在t时刻事件发生，则append(t-advance, t+delay) 
@@ -129,7 +127,7 @@ class DefaultAnnotationSolver(ContentSolver):
                     time_map[annotation_id] = render_t
                     # 回调trigger
                     event_t = annotation.rule.trigger(old_time, render_t, self.render_build_eval_exper_func(annotation.rule.trigger, physics_ctx, time_wrapper_ranges))
-                    if event_t is not None:
+                    if event_t is not None and render_range[0] <= render_t <= render_range[1]:
                         self.timeline.setdefault(annotation_id, []).append(
                             (event_t - annotation.rule.advance, event_t + annotation.rule.delay)
                         )                       
@@ -140,23 +138,27 @@ class DefaultAnnotationSolver(ContentSolver):
                     old_time = time_map.get(annotation_id, None)
                     # 更新新值
                     time_map[annotation_id] = render_t
-                    if annotation_id not in start_map:
-                        event_t = annotation.rule.start_trigger(old_time, render_t, self.render_build_eval_exper_func(annotation.rule.start_trigger, physics_ctx, time_wrapper_ranges))
-                        if event_t is not None:
-                            start_map[annotation_id] = event_t
-                    else:
-                        event_t = annotation.rule.end_trigger(old_time, render_t, self.render_build_eval_exper_func(annotation.rule.end_trigger, physics_ctx, time_wrapper_ranges))
-                        if event_t is not None:
-                            self.timeline.setdefault(annotation_id, []).append(
-                                (start_map[annotation_id], event_t)
-                            )
-                            # 事件已经结束，清除开始时间和结束时间
-                            start_map.pop(annotation_id)
+                    # 同样在wrapper区间内部评估事件是否开始
+                    if render_range[0] <= render_t <= render_range[1]:
+                        if annotation_id not in start_map:
+                            event_t = annotation.rule.start_trigger(old_time, render_t, self.render_build_eval_exper_func(annotation.rule.start_trigger, physics_ctx, time_wrapper_ranges))
+                            if event_t is not None:
+                                start_map[annotation_id] = event_t
+                        else:
+                            event_t = annotation.rule.end_trigger(old_time, render_t, self.render_build_eval_exper_func(annotation.rule.end_trigger, physics_ctx, time_wrapper_ranges))
+                            if event_t is not None:
+                                self.timeline.setdefault(annotation_id, []).append(
+                                    (start_map[annotation_id], event_t)
+                                )
+                                # 事件已经结束，清除开始时间和结束时间
+                                start_map.pop(annotation_id)
         
-        # 收尾时间
+        # 将时间收尾到对应wrapper区间的结束时刻
         for annotation_id in start_map.keys():
+            wrapper_id = annotation_belongs_map[annotation_id]
+            render_range = render_range_map[wrapper_id]["render_range"]
             self.timeline.setdefault(annotation_id, []).append(
-                (start_map[annotation_id], physics_ctx.physics_to_render_mapping_func(physics_ctx.total_time))
+                (start_map[annotation_id], render_range[1])
             )
         
         return AnnotationContext(self.annotations, self.timeline, self.render_value_at_time, self.render_eval_expr, self.render_build_eval_exper_func, "render")

@@ -21,10 +21,6 @@ class Context:
     def set_physics_to_render_mapping_func(self, func: Callable[[float], float]):
         self.physics_to_render_mapping_func = func
 
-    def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
-        raise NotImplementedError("add_entities must be implemented in subclasses.")
-
-
 # animation 上下文(求解后使用)
 class PhysicsContext(Context):
     """求解后的物理上下文，管理整个动画中的变量。"""
@@ -341,11 +337,15 @@ class AnnotationContext(Context):
         content,
         callback=None,
         tracker: ValueTracker = None,
+        physics_ctx: PhysicsContext = None,
     ):
         def updater(m):
             t = tracker.get_value()
+            physics_t = self.render_to_physics_mapping_func(t)
+
+            # 这里待优化，变量r需要自适应，因为timeline是根据space_name而不同的
             if self.name_space == "physics":
-                t = self.render_to_physics_mapping_func(t)
+                t = physics_t
             elif self.name_space == "render":
                 t = t
                 
@@ -360,11 +360,17 @@ class AnnotationContext(Context):
 
             x_pos_value, y_pos_value = None, None
             if not is_numeric(x_pos_name):
-                x_pos_value = self.value_at_time(x_pos_name, t)
+                if self.name_space == "physics":
+                    x_pos_value = self.value_at_time(x_pos_name, t)
+                elif self.name_space == "render":
+                    x_pos_value = self.value_at_time(x_pos_name, physics_t, t, physics_ctx)
             else:
                 x_pos_value = float(x_pos_name)
             if not is_numeric(y_pos_name):
-                y_pos_value = self.value_at_time(y_pos_name, t)
+                if self.name_space == "physics":
+                    y_pos_value = self.value_at_time(y_pos_name, t)
+                elif self.name_space == "render":
+                    y_pos_value = self.value_at_time(y_pos_name, physics_t, t, physics_ctx)
             else:
                 y_pos_value = float(y_pos_name)
 
@@ -372,11 +378,17 @@ class AnnotationContext(Context):
                 x_shift_name, y_shift_name = content.shift_variables
                 x_shift_value, y_shift_value = None, None
                 if not is_numeric(x_shift_name):
-                    x_shift_value = self.value_at_time(x_shift_name, t)
+                    if self.name_space == "physics":
+                        x_shift_value = self.value_at_time(x_shift_name, t)
+                    elif self.name_space == "render":
+                        x_shift_value = self.value_at_time(x_shift_name, physics_t, t, physics_ctx)
                 else:
                     x_shift_value = float(x_shift_name)
                 if not is_numeric(y_shift_name):
-                    y_shift_value = self.value_at_time(y_shift_name, t)
+                    if self.name_space == "physics":
+                        y_shift_value = self.value_at_time(y_shift_name, t)
+                    elif self.name_space == "render":
+                        y_shift_value = self.value_at_time(y_shift_name, physics_t, t, physics_ctx)
                 else:
                     y_shift_value = float(y_shift_name)
                 callback(x_pos_value, y_pos_value, x_shift_value, y_shift_value)
@@ -386,7 +398,7 @@ class AnnotationContext(Context):
 
         return updater
 
-    def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
+    def get_entities(self, tracker: ValueTracker, physics_ctx: PhysicsContext) -> list[Mobject]:
         #================================注释实体开始================================
         entities = []
         for anno_id, anno in self.annotations.items():
@@ -395,7 +407,7 @@ class AnnotationContext(Context):
                 continue
             entities.append(anno.content.obj)
             call_back = anno.content.change_callback()
-            anno.content.obj.add_updater(self.make_anno_position_updater(anno_id, anno.content, call_back, tracker))
+            anno.content.obj.add_updater(self.make_anno_position_updater(anno_id, anno.content, call_back, tracker, physics_ctx))
         return entities
     
 class TransitionContext(Context):
@@ -418,7 +430,7 @@ class TransitionContext(Context):
         self.build_eval_exper_func = build_eval_exper_func
         self.name_space = name_space
 
-    def make_sequential(self, transition, groups, times, tracker, style="scale", duration=0.5, smooth_func : Callable[[float], float] = lambda x: x * x * (3 - 2 * x)):
+    def make_sequential(self, transition, groups, times, tracker, physics_ctx: PhysicsContext, style="scale", duration=0.5, smooth_func : Callable[[float], float] = lambda x: x * x * (3 - 2 * x)):
         """
         根据 tracker 在多个公式之间依次切换，支持多种动画风格。
         formulas: [mob_a, mob_b, mob_c, mob_d]
@@ -478,8 +490,9 @@ class TransitionContext(Context):
         # 这里m是最大的那个group(group1(str1,str2), group2(str3,str4,str5,str6))
         def updater(m):
             t = tracker.get_value()
+            physics_t = self.render_to_physics_mapping_func(t)
             if self.name_space == "physics":
-                t = self.render_to_physics_mapping_func(t)
+                t = physics_t
             elif self.name_space == "render":
                 t = t
             
@@ -487,11 +500,17 @@ class TransitionContext(Context):
 
             x_pos_value, y_pos_value = None, None
             if not is_numeric(x_pos_name):
-                x_pos_value = self.value_at_time(x_pos_name, t)
+                if self.name_space == "physics":
+                    x_pos_value = self.value_at_time(x_pos_name, t)
+                elif self.name_space == "render":
+                    x_pos_value = self.value_at_time(x_pos_name, physics_t, t, physics_ctx)
             else:
                 x_pos_value = float(x_pos_name)
             if not is_numeric(y_pos_name):
-                y_pos_value = self.value_at_time(y_pos_name, t)
+                if self.name_space == "physics":
+                    y_pos_value = self.value_at_time(y_pos_name, t)
+                elif self.name_space == "render":
+                    y_pos_value = self.value_at_time(y_pos_name, physics_t, t, physics_ctx)
             else:
                 y_pos_value = float(y_pos_name)
 
@@ -543,12 +562,12 @@ class TransitionContext(Context):
         return container
 
 
-    def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
+    def get_entities(self, tracker: ValueTracker, physics_ctx: PhysicsContext) -> list[Mobject]:
         #================================transition开始================================
         # 执行annotation transition动画
         entities = []
         for trans_id, transition in self.transitions.items():
             groups = transition.content.groups
-            group_container = self.make_sequential(transition, groups, self.timeline[trans_id], tracker, transition.style, transition.duration, transition.smooth_func)
+            group_container = self.make_sequential(transition, groups, self.timeline[trans_id], tracker, physics_ctx, transition.style, transition.duration, transition.smooth_func)
             entities.append(group_container)
         return entities

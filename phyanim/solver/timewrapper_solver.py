@@ -15,6 +15,7 @@ class DefaultTimeWrapperSolver:
         # 先评估触发器的触发时间
         old_time = None
         trigger_map = {}
+        wrapper_map = {}
 
         # 先检查触发，wrapper上的触发器都在物理层上评估
         for t in physics_ctx.times:
@@ -60,6 +61,7 @@ class DefaultTimeWrapperSolver:
             last_physics_stop = time_range[1]
 
             wrapper_time_ranges.append((wrapper_start, wrapper_end, time_range[2]))
+            wrapper_map[time_range[2]] = (wrapper_start, wrapper_end, time_range[2])
         self.wrapper_time_ranges = wrapper_time_ranges
         
         # 加上最后一个物理区间的时间，如果有的话
@@ -112,7 +114,14 @@ class DefaultTimeWrapperSolver:
 
         self.render_to_physics_mapping_func = render_to_physics_mapping_func
         self.physics_to_render_mapping_func = physics_to_render_mapping_func
-        return TimelineResult(self.total_time, self.render_to_physics_mapping_func, self.physics_to_render_mapping_func, self.time_ranges, self.wrapper_time_ranges)
+
+        render_range_map = {}
+        for wrapper_id, (start, end, _) in trigger_map.items():
+            render_range_map[wrapper_id] = {
+                "physics_range": (start, end),
+                "render_range": (wrapper_map[wrapper_id][0], wrapper_map[wrapper_id][1])
+            }
+        return TimelineResult(self.total_time, self.render_to_physics_mapping_func, self.physics_to_render_mapping_func, self.time_ranges, self.wrapper_time_ranges, render_range_map)
 
 
 class TimelineResult:
@@ -121,10 +130,16 @@ class TimelineResult:
         render_to_physics_mapping_func: Callable[[float], float], 
         physics_to_render_mapping_func: Callable[[float], float],
         time_ranges: list[tuple[float, float, str]],
-        time_wrapper_ranges: list[tuple[float, float, str]]
-    ):
+        time_wrapper_ranges: list[tuple[float, float, str]],
+        render_range_map: dict[str, dict[str, tuple[float, float]]]
+    ):  
+        # 总渲染时间
         self.total_time = total_time
         self.render_to_physics_mapping_func = render_to_physics_mapping_func
         self.physics_to_render_mapping_func = physics_to_render_mapping_func
+        # 物理时间区块
         self.time_ranges = time_ranges
+        # 渲染时间区块
         self.time_wrapper_ranges = time_wrapper_ranges
+        # time_wrapper的物理时间区块和渲染时间区块
+        self.render_range_map = render_range_map
