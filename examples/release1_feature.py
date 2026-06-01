@@ -260,19 +260,28 @@ if __name__ == "__main__":
         Annotation(
             id="spring_label",
             ann_type="while",
-            content=TextContent(txt="这个是layer层的文本，当ball1速度小于0.5时消失", pos_variables=("0", "2.5")),
-            activation=AnnotationActivation(trigger=Trigger(expression="ball1vx > 0.5")),
+            content=TextContent(txt="这个是layer层的文本，暂停6秒后显示", pos_variables=("0", "2.5")),
+            activation=AnnotationActivation(trigger=Trigger(expression="local_t > 6")),
         )
     )
 
     scene = PhyAnimationMultiLayerScene2D()
+    # scene.add_time_wrapper(
+    #     TimeWrapper(
+    #         id="time_warp1",
+    #         type="slow",
+    #         trigger=CrossingTrigger(expression="ball1x - start_x", direction=1),
+    #         advance=1,
+    #         delay=1,
+    #         speed=0.25,
+    #     )
+    # )
     scene.add_time_wrapper(
         TimeWrapper(
-            id="time_warp1",
+            id="time_warp2",
+            type="freeze",
             trigger=CrossingTrigger(expression="ball1x - start_x", direction=1),
-            advance=1,
-            delay=1,
-            speed=0.25,
+            extend_to=10
         )
     )
     scene.set_animation(animation)

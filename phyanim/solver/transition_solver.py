@@ -7,17 +7,20 @@ from phyanim.solver.solver import ContentSolver
 
 from phyanim.core.enhance.transition import Transition
 
+import numpy as np
+
 @dataclass
 class DefaultTransitionSolver(ContentSolver):
 
     timeline: dict[str, list[float]] = field(default_factory=dict)
     transitions: dict[str, Transition] = field(default_factory=dict)
+    sample_dt: float = 1/60
 
-    def solve(self, physics_ctx: PhysicsContext, name_space: str) -> TransitionContext:
+    def solve(self, physics_ctx: PhysicsContext, name_space: str, time_wrapper_ranges: list[tuple[float, float, str]]) -> TransitionContext:
         if name_space == "physics":
             return self.solve_physics(physics_ctx)
         elif name_space == "render":
-            return self.solve_render(physics_ctx)
+            return self.solve_render(physics_ctx, time_wrapper_ranges)
 
     def solve_physics(self, physics_ctx: PhysicsContext) -> TransitionContext:
         old_time = None
@@ -52,7 +55,12 @@ class DefaultTransitionSolver(ContentSolver):
         return TransitionContext(self.transitions, self.timeline, physics_ctx.value_at_time, physics_ctx.eval_expr, physics_ctx.build_eval_exper_func, "physics")
 
     
-    def solve_render(self, physics_ctx: PhysicsContext) -> TransitionContext:
+    def solve_render(self, physics_ctx: PhysicsContext, time_wrapper_ranges: list[tuple[float, float, str]]) -> TransitionContext:
+        physics_start_time = physics_ctx.times[0]
+        physics_end_time = physics_ctx.times[-1]
+        render_start_time = physics_ctx.physics_to_render_mapping_func(physics_start_time)
+        render_end_time = physics_ctx.physics_to_render_mapping_func(physics_end_time)
+        render_times = np.arange(render_start_time, render_end_time, self.sample_dt, dtype=float)
         # 渲染层的时间是物理层的时间映射
         old_time = None
 
@@ -60,14 +68,13 @@ class DefaultTransitionSolver(ContentSolver):
         for transition_id, transition in self.transitions.items():
             transition_triggers[transition_id] = len(transition.triggers)
 
-        for physics_t in physics_ctx.times:
-            render_t = physics_ctx.physics_to_render_mapping_func(physics_t)
+        for render_t in render_times:
             # 评估某个事件是否已经开始
             for transition_id, transition in self.transitions.items():
                 triggers = transition.triggers
 
                 for trigger in triggers:
-                    event_t = trigger(old_time, render_t, self.render_build_eval_exper_func(trigger))
+                    event_t = trigger(old_time, render_t, self.render_build_eval_exper_func(trigger, physics_ctx, time_wrapper_ranges))
                     if event_t is not None:
                         self.timeline.setdefault(transition_id, []).append(event_t)
 

@@ -18,7 +18,7 @@ from phyanim.core.layer import Layer
 class PhysicsAnimation:
     """Coordinates objects, sequential segments, keyframes, and timelines."""
     # 求解精确度
-    sample_dt: float = 1 / 30
+    sample_dt: float = 1 / 60
     engine: str = "scipy"
 
     # 变量相关
@@ -118,7 +118,7 @@ class PhysicsAnimation:
     def get_render_layer(self) -> Layer:
         if self.render_layer is not None:
             return self.render_layer
-        self.render_layer = Layer(id="render_layer", name_space="render")
+        self.render_layer = Layer(id="render_layer", name_space="render", sample_dt=self.sample_dt)
         return self.render_layer
 
     # initial_keyframe必须包含所有状态变量的初始值（必须强行保证，否则可能造成数据丢失）
