@@ -76,11 +76,33 @@ class ConvexTrack(VMobject):
 class StraightTrack(VMobject):
     def __init__(self, start: np.ndarray, end: np.ndarray, color: str = WHITE, fill_opacity: float = 0.3, stroke_width: float = 2,**kwargs):
         super().__init__(**kwargs)
-        self.start = start
-        self.end = end
+        self.start = self._to_3d(np.array(start))
+        self.end = self._to_3d(np.array(end))
         self.set_points_as_corners([self.start, self.end])
         self.set_stroke(color=color, width=stroke_width)
         self.set_fill(color=color, opacity=fill_opacity)
+
+    @staticmethod
+    def _to_3d(arr: np.ndarray) -> np.ndarray:
+        if arr.shape == (2,):
+            return np.array([arr[0], arr[1], 0.0])
+        elif arr.shape == (3,):
+            return arr
+        else:
+            raise ValueError(f"2D track point must have 2 or 3 dimensions. Invalid input shape: {arr.shape}")
+
+    def point_change_callbacks(self):
+        self.start_point_change_callback = lambda x, y: self.set_start_point(np.array([x, y, 0.0]))
+        self.end_point_change_callback = lambda x, y: self.set_end_point(np.array([x, y, 0.0]))
+        return [self.start_point_change_callback, self.end_point_change_callback]
+
+    def set_start_point(self, start: np.ndarray):
+        self.start = self._to_3d(np.array(start))
+        self.set_points_as_corners([self.start, self.end])
+
+    def set_end_point(self, end: np.ndarray):
+        self.end = self._to_3d(np.array(end))
+        self.set_points_as_corners([self.start, self.end])
 
 # 直线轨道组
 class StraightTrackGroup(VMobject):
