@@ -83,7 +83,7 @@ class PhysicsContext(Context):
                 )
             locals_map = {
                 name: sp.Symbol(name)
-                for name in invalid_symbol_names
+                for name in symbol_names
             }
             self.cached_seg_symbols_map[segment.segment_id] = locals_map
 

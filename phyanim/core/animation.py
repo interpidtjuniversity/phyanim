@@ -9,6 +9,7 @@ from phyanim.core.objects import PhysicObject2D
 from phyanim.core.segment import PhysicsSegment
 from phyanim.core.solution import SegmentResult
 from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
+from phyanim.core.validation import SymbolRegistry, normalize_numeric_mapping, require_identifiers
 from phyanim.solver.solver import Solver
 from phyanim.solver.scipy_solver import ScipySegmentSolver
 from phyanim.solver.heyoka_solver import HeyokaSegmentSolver
@@ -39,75 +40,113 @@ class PhysicsAnimation:
     physics_layer: Layer | None = None
     render_layer: Layer | None = None
 
+    def __post_init__(self) -> None:
+        self.global_parameters = normalize_numeric_mapping(
+            self.global_parameters,
+            kind="Global parameter",
+        )
+
+    @property
+    def symbol_registry(self) -> SymbolRegistry:
+        registry = SymbolRegistry.from_global_parameters(self.global_parameters)
+        for obj in self.objects.values():
+            registry.reserve_mapping(
+                obj.parameters,
+                owner=f"object '{obj.object_id}' parameters",
+                kind="parameter",
+            )
+            registry.reserve_mapping(
+                obj.state_variables,
+                owner=f"object '{obj.object_id}' states",
+                kind="state",
+            )
+        return registry
+
     # 将object添加到动画中，initial_state必须在object.state_variables中定义
-    def add_object(self, obj: PhysicObject2D, initial_state: dict[str, float]) -> None:
-        invalid_global_parameters = [name for name in self.global_parameters if not name.isidentifier()]
-        if invalid_global_parameters:
-            raise ValueError(f"Global parameter names must be valid identifiers: {invalid_global_parameters}")
+    def add_object(self, obj: PhysicObject2D, initial_state: dict[str, float | int | str]) -> "PhysicsAnimation":
         if obj.object_id in self.objects:
             raise ValueError(f"Duplicate object id: {obj.object_id}")
-        existing_parameters = set(self.global_parameters)
-        for existing in self.objects.values():
-            existing_parameters.update(existing.parameter_values())
-        duplicate_parameters = set(obj.parameter_values()) & existing_parameters
-        if duplicate_parameters:
-            raise ValueError(
-                f"Object '{obj.object_id}' parameters duplicate existing parameters: "
-                f"{sorted(duplicate_parameters)}"
-            )
-        duplicate_states = {
-            name
-            for existing in self.objects.values()
-            for name in existing.state_variables
-        } & set(obj.state_variables)
-        if duplicate_states:
-            raise ValueError(
-                f"Object '{obj.object_id}' state variables duplicate existing object states: "
-                f"{sorted(duplicate_states)}"
-            )
-        duplicate_parameter_states = set(obj.state_variables) & existing_parameters
-        if duplicate_parameter_states:
-            raise ValueError(
-                f"Object '{obj.object_id}' state variables duplicate existing parameters: "
-                f"{sorted(duplicate_parameter_states)}"
-            )
-        for name in initial_state:
-            if not name.isidentifier():
-                raise ValueError(f"Initial state name '{name}' must be a valid identifier.")
+        normalized_state = normalize_numeric_mapping(
+            initial_state,
+            kind=f"Object '{obj.object_id}' initial state",
+        )
+        missing = set(obj.state_variables) - set(normalized_state)
+        unknown = set(normalized_state) - set(obj.state_variables)
+        if missing:
+            raise ValueError(f"Object '{obj.object_id}' missing initial states: {sorted(missing)}")
+        if unknown:
+            raise ValueError(f"Object '{obj.object_id}' has unknown initial states: {sorted(unknown)}")
+        registry = self.symbol_registry
+        registry.reserve_mapping(
+            obj.parameters,
+            owner=f"object '{obj.object_id}' parameters",
+            kind="parameter",
+        )
+        registry.reserve_mapping(
+            obj.state_variables,
+            owner=f"object '{obj.object_id}' states",
+            kind="state",
+        )
         self.objects[obj.object_id] = obj
         if self.initial_keyframe is None:
             self.initial_keyframe = PhysicsKeyFrame(
                 time=0.0,
-                object_states={obj.object_id: dict(initial_state)},
+                object_states={obj.object_id: dict(normalized_state)},
                 parameters=self.global_parameters,
             )
         else:
-            self.initial_keyframe.object_states[obj.object_id] = dict(initial_state)
+            self.initial_keyframe.object_states[obj.object_id] = dict(normalized_state)
+        return self
 
     # 每个段后面都需要一个 terminal 事件，用于结束当前段。
-    def add_segment(self, segment: PhysicsSegment, end_event: PhysicsEvent) -> None:
-        duplicate_segment_parameters = set(segment.parameters) & set(self.global_parameters)
-        if duplicate_segment_parameters:
-            raise ValueError(
-                f"Segment '{segment.segment_id}' parameters duplicate global parameters: "
-                f"{sorted(duplicate_segment_parameters)}"
-            )
-                # 有状态转移的事件必须是终端事件，应用状态转移函数后开启新的段
+    def add_segment(self, segment: PhysicsSegment, end_event: PhysicsEvent) -> "PhysicsAnimation":
+        self._validate_segment(segment)
+        # 有状态转移的事件必须是终端事件，应用状态转移函数后开启新的段
         if end_event.transition is None or not end_event.condition.terminal:
             raise ValueError(
                 f"Event '{end_event.name}' must be terminal and has a state transition."
             )
         self.segments.append(segment)
         self.segment_end_events.append(end_event)
+        return self
 
-    def solve(self) -> None:
+    def add_equation_segment(
+        self,
+        segment_id: str,
+        *,
+        objects: list[str],
+        equations: dict[str, str],
+        end_event: PhysicsEvent,
+        duration: float,
+        owners: dict[str, str] | None = None,
+        parameters: dict[str, float] | None = None,
+        derived: dict[str, str] | None = None,
+    ) -> "PhysicsAnimation":
+        return self.add_segment(
+            PhysicsSegment.from_equations(
+                segment_id,
+                objects=objects,
+                equations=equations,
+                duration=duration,
+                owners=owners,
+                parameters=parameters,
+                derived=derived,
+            ),
+            end_event=end_event,
+        )
+
+    def solve(self, solver: Solver | None = None) -> PhysicsContext:
         """求解动画"""
+        solver = solver or self._build_solver()
+        self.physics_ctx = self.solve_simulation(solver)
+        return self.physics_ctx
+
+    def _build_solver(self) -> Solver:
         if self.engine == "scipy":
-            self.physics_ctx = self.solve_simulation(ScipySegmentSolver(sample_dt=self.sample_dt))
-        elif self.engine == "heyoka":
-            self.physics_ctx = self.solve_simulation(HeyokaSegmentSolver(sample_dt=self.sample_dt))
-        else:
-            raise ValueError(f"Unknown engine: {self.engine}. Supported engines are 'scipy' and 'heyoka'.")
+            return ScipySegmentSolver(sample_dt=self.sample_dt)
+        if self.engine == "heyoka":
+            return HeyokaSegmentSolver(sample_dt=self.sample_dt)
+        raise ValueError(f"Unknown engine: {self.engine}. Supported engines are 'scipy' and 'heyoka'.")
 
     def get_physics_layer(self) -> Layer:     
         if self.physics_layer is not None:
@@ -158,6 +197,30 @@ class PhysicsAnimation:
                 self.segments,
                 self.segment_parameters,
                 self.objects
+            )
+
+    def _validate_segment(self, segment: PhysicsSegment) -> None:
+        if segment.segment_id in {existing.segment_id for existing in self.segments}:
+            raise ValueError(f"Duplicate segment id: {segment.segment_id}")
+        unknown_objects = sorted(set(segment.object_ids) - set(self.objects))
+        if unknown_objects:
+            raise ValueError(f"Segment '{segment.segment_id}' references unknown objects: {unknown_objects}")
+        require_identifiers(segment.parameters, kind=f"Segment '{segment.segment_id}' parameter")
+        duplicate_segment_parameters = set(segment.parameters) & set(self.global_parameters)
+        if duplicate_segment_parameters:
+            raise ValueError(
+                f"Segment '{segment.segment_id}' parameters duplicate global parameters: "
+                f"{sorted(duplicate_segment_parameters)}"
+            )
+        object_state_names = {
+            name
+            for object_id in segment.object_ids
+            for name in self.objects[object_id].state_variables
+        }
+        unknown_states = sorted(set(segment.state_vector) - object_state_names)
+        if unknown_states:
+            raise ValueError(
+                f"Segment '{segment.segment_id}' states are not declared by its objects: {unknown_states}"
             )
 
     def _segment_parameters(self, segment: PhysicsSegment) -> dict[str, float]:

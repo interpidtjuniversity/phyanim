@@ -1,5 +1,33 @@
-from manim import VMobject, WHITE, PI
+from manim import VMobject, WHITE, PI, Arrow, Circle, Dot, Rectangle, VGroup
 import numpy as np
+
+
+def _to_3d(arr: np.ndarray) -> np.ndarray:
+    arr = np.array(arr, dtype=float)
+    if arr.shape == (2,):
+        return np.array([arr[0], arr[1], 0.0])
+    if arr.shape == (3,):
+        return arr
+    raise ValueError(f"2D point must have 2 or 3 dimensions. Invalid input shape: {arr.shape}")
+
+
+def _arc_points(
+    *,
+    center: np.ndarray,
+    radius: float,
+    start_angle: float,
+    end_angle: float,
+    num_points: int,
+) -> list[np.ndarray]:
+    if radius <= 0:
+        raise ValueError("radius must be positive.")
+    if num_points < 2:
+        raise ValueError("num_points must be at least 2.")
+    center = _to_3d(center)
+    return [
+        center + np.array([radius * np.cos(angle), radius * np.sin(angle), 0.0])
+        for angle in np.linspace(start_angle, end_angle, num_points)
+    ]
 
 # 内凹球形轨道
 class ConcaveTrack(VMobject):
@@ -71,6 +99,187 @@ class ConvexTrack(VMobject):
         self.set_points_as_corners(points)
         self.set_stroke(color=color, width=stroke_width)
         self.set_fill(color=color, opacity=fill_opacity)
+
+
+class CircularArcTrack(VMobject):
+    """Open circular arc track.
+
+    Angles use Manim/math convention: 0 points right, PI/2 points up.
+    """
+
+    def __init__(
+        self,
+        radius: float,
+        start_angle: float,
+        end_angle: float,
+        center: np.ndarray = np.array([0.0, 0.0, 0.0]),
+        color: str = WHITE,
+        stroke_width: float = 4,
+        num_points: int = 80,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.radius = radius
+        self.start_angle = start_angle
+        self.end_angle = end_angle
+        self.center = _to_3d(center)
+        self.num_points = num_points
+        self.set_points_as_corners(
+            _arc_points(
+                center=self.center,
+                radius=self.radius,
+                start_angle=self.start_angle,
+                end_angle=self.end_angle,
+                num_points=self.num_points,
+            )
+        )
+        self.set_stroke(color=color, width=stroke_width)
+        self.set_fill(opacity=0)
+
+
+class RightSemicircleTrack(CircularArcTrack):
+    """Right half of a vertical circular track, from bottom to top by default."""
+
+    def __init__(
+        self,
+        radius: float,
+        center: np.ndarray = np.array([0.0, 0.0, 0.0]),
+        color: str = WHITE,
+        stroke_width: float = 4,
+        num_points: int = 80,
+        upward: bool = True,
+        **kwargs,
+    ):
+        start_angle = -PI / 2 if upward else PI / 2
+        end_angle = PI / 2 if upward else -PI / 2
+        super().__init__(
+            radius=radius,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            center=center,
+            color=color,
+            stroke_width=stroke_width,
+            num_points=num_points,
+            **kwargs,
+        )
+
+
+class LeftSemicircleTrack(CircularArcTrack):
+    """Left half of a vertical circular track, from bottom to top by default."""
+
+    def __init__(
+        self,
+        radius: float,
+        center: np.ndarray = np.array([0.0, 0.0, 0.0]),
+        color: str = WHITE,
+        stroke_width: float = 4,
+        num_points: int = 80,
+        upward: bool = True,
+        **kwargs,
+    ):
+        start_angle = -PI / 2 if upward else PI / 2
+        end_angle = -3 * PI / 2 if upward else 3 * PI / 2
+        super().__init__(
+            radius=radius,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            center=center,
+            color=color,
+            stroke_width=stroke_width,
+            num_points=num_points,
+            **kwargs,
+        )
+
+
+class InclinedPlane(VMobject):
+    """Triangular inclined plane commonly used in mechanics diagrams."""
+
+    def __init__(
+        self,
+        length: float,
+        angle: float,
+        start: np.ndarray = np.array([0.0, 0.0, 0.0]),
+        color: str = WHITE,
+        fill_opacity: float = 0.12,
+        stroke_width: float = 3,
+        **kwargs,
+    ):
+        if length <= 0:
+            raise ValueError("length must be positive.")
+        super().__init__(**kwargs)
+        start = _to_3d(start)
+        end = start + np.array([length * np.cos(angle), length * np.sin(angle), 0.0])
+        base = np.array([end[0], start[1], 0.0])
+        self.set_points_as_corners([start, end, base, start])
+        self.set_stroke(color=color, width=stroke_width)
+        self.set_fill(color=color, opacity=fill_opacity)
+
+
+class Pulley(VGroup):
+    """Simple fixed pulley with a visible rim and axle."""
+
+    def __init__(
+        self,
+        radius: float = 0.25,
+        color: str = WHITE,
+        stroke_width: float = 3,
+        axle_radius: float = 0.035,
+        **kwargs,
+    ):
+        if radius <= 0:
+            raise ValueError("radius must be positive.")
+        rim = Circle(radius=radius, color=color, stroke_width=stroke_width)
+        axle = Dot(radius=axle_radius, color=color)
+        super().__init__(rim, axle, **kwargs)
+
+
+class Block(VGroup):
+    """Rectangular block with optional center marker."""
+
+    def __init__(
+        self,
+        width: float = 0.6,
+        height: float = 0.35,
+        color: str = WHITE,
+        fill_opacity: float = 0.25,
+        stroke_width: float = 3,
+        show_center: bool = False,
+        **kwargs,
+    ):
+        if width <= 0 or height <= 0:
+            raise ValueError("width and height must be positive.")
+        body = Rectangle(
+            width=width,
+            height=height,
+            color=color,
+            fill_opacity=fill_opacity,
+            stroke_width=stroke_width,
+        )
+        parts = [body]
+        if show_center:
+            parts.append(Dot(radius=min(width, height) * 0.08, color=color))
+        super().__init__(*parts, **kwargs)
+
+
+class VectorArrow(Arrow):
+    """Convenience force/velocity arrow with stable defaults for diagrams."""
+
+    def __init__(
+        self,
+        start: np.ndarray = np.array([0.0, 0.0, 0.0]),
+        end: np.ndarray = np.array([1.0, 0.0, 0.0]),
+        color: str = WHITE,
+        stroke_width: float = 4,
+        **kwargs,
+    ):
+        super().__init__(
+            start=_to_3d(start),
+            end=_to_3d(end),
+            color=color,
+            stroke_width=stroke_width,
+            buff=0,
+            **kwargs,
+        )
 
 # 标准直线轨道
 class StraightTrack(VMobject):

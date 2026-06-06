@@ -5,6 +5,7 @@ from typing import Callable
 
 from phyanim.core.events import Parameters, State
 from phyanim.core.expressions import CompiledExpression, SympyExpressionCompiler
+from phyanim.core.validation import require_identifier, require_identifiers, require_unique
 
 DerivativeFunction = Callable[[float, State, Parameters], State]
 DerivedFunction = Callable[[float, State, Parameters], float]
@@ -36,16 +37,68 @@ class PhysicsSegment:
     # 阶段持续时长，这个时长不具有一般意义，因为最终阶段的结束由该阶段后接的事件决定
     duration: float = 1.0
 
+    @classmethod
+    def from_equations(
+        cls,
+        segment_id: str,
+        *,
+        objects: list[str],
+        equations: dict[str, str],
+        duration: float,
+        owners: dict[str, str] | None = None,
+        parameters: dict[str, float] | None = None,
+        derived: dict[str, str] | None = None,
+    ) -> "PhysicsSegment":
+        """Build a segment from symbolic ODE equations.
+
+        The order of the equation mapping is used as the solver state order.
+        """
+
+        return cls(
+            segment_id=segment_id,
+            object_ids=list(objects),
+            state_vector=list(equations),
+            state_owners=owners,
+            equations=dict(equations),
+            parameters=dict(parameters or {}),
+            derived_equations=dict(derived or {}),
+            duration=duration,
+        )
+
+    @classmethod
+    def from_derivative(
+        cls,
+        segment_id: str,
+        *,
+        objects: list[str],
+        state_vector: list[str],
+        derivative: DerivativeFunction,
+        duration: float,
+        owners: dict[str, str] | None = None,
+        parameters: dict[str, float] | None = None,
+        derived_quantities: dict[str, DerivedFunction] | None = None,
+    ) -> "PhysicsSegment":
+        return cls(
+            segment_id=segment_id,
+            object_ids=list(objects),
+            state_vector=list(state_vector),
+            state_owners=owners,
+            derivative=derivative,
+            parameters=dict(parameters or {}),
+            derived_quantities=dict(derived_quantities or {}),
+            duration=duration,
+        )
+
     def __post_init__(self) -> None:
+        require_identifier(self.segment_id, kind="segment_id")
         if not self.object_ids:
             raise ValueError(f"Segment '{self.segment_id}' object_ids cannot be empty.")
-        invalid_names = [name for name in self.state_vector if not name.isidentifier()]
-        if invalid_names:
-            raise ValueError(
-                f"Segment '{self.segment_id}' state names must be valid identifiers: {invalid_names}"
-            )
-        if len(set(self.state_vector)) != len(self.state_vector):
-            raise ValueError(f"Segment '{self.segment_id}' state_vector contains duplicate names.")
+        require_identifiers(self.object_ids, kind=f"Segment '{self.segment_id}' object")
+        require_identifiers(self.state_vector, kind=f"Segment '{self.segment_id}' state")
+        require_unique(self.state_vector, kind=f"Segment '{self.segment_id}' state")
+        require_identifiers(self.parameters, kind=f"Segment '{self.segment_id}' parameter")
+        require_identifiers(self.derived_quantities, kind=f"Segment '{self.segment_id}' derived quantity")
+        require_identifiers(self.derived_equations, kind=f"Segment '{self.segment_id}' derived quantity")
         if self.state_owners is None:
             if len(self.object_ids) != 1:
                 raise ValueError(
@@ -55,6 +108,9 @@ class PhysicsSegment:
                 self.state_owners = {name: self.object_ids[0] for name in self.state_vector}
 
         # 部分状态变量没有指定所有者，报错
+        extra_owners = set(self.state_owners) - set(self.state_vector)
+        if extra_owners:
+            raise ValueError(f"Segment '{self.segment_id}' has state owners for unknown states: {sorted(extra_owners)}")
         missing_owners = [name for name in self.state_vector if name not in self.state_owners]
         if missing_owners:
             raise ValueError(f"Segment '{self.segment_id}' missing state owners: {missing_owners}")
@@ -65,8 +121,28 @@ class PhysicsSegment:
             raise ValueError(
                 f"Segment '{self.segment_id}' requires either callable derivative or SymPy equations."
             )
+        if self.derivative is not None and self.equations is not None:
+            raise ValueError(
+                f"Segment '{self.segment_id}' cannot define both callable derivative and SymPy equations."
+            )
+        if self.equations is not None:
+            require_identifiers(self.equations, kind=f"Segment '{self.segment_id}' equation")
+            missing = [name for name in self.state_vector if name not in self.equations]
+            if missing:
+                raise ValueError(f"Segment '{self.segment_id}' missing equations for states: {missing}")
+            extra = sorted(set(self.equations) - set(self.state_vector))
+            if extra:
+                raise ValueError(f"Segment '{self.segment_id}' has equations for unknown states: {extra}")
         if self.duration <= 0:
             raise ValueError(f"Segment '{self.segment_id}' duration must be positive.")
+
+    @property
+    def object_set(self) -> set[str]:
+        return set(self.object_ids)
+
+    @property
+    def state_set(self) -> set[str]:
+        return set(self.state_vector)
 
     def object_state_variables(self, object_id: str) -> list[str]:
         assert self.state_owners is not None

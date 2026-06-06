@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from phyanim.core.expressions import CompiledExpression, SympyExpressionCompiler
+from phyanim.core.validation import require_identifier, require_identifiers
 
 
 State = dict[str, float]
@@ -29,9 +30,21 @@ class EventCondition:
     terminal: bool = True
     direction: int = 0
 
+    @classmethod
+    def from_expression(
+        cls,
+        expression: str,
+        *,
+        terminal: bool = True,
+        direction: int = 0,
+    ) -> "EventCondition":
+        return cls(expression=expression, terminal=terminal, direction=direction)
+
     def __post_init__(self) -> None:
         if self.function is None and self.expression is None:
             raise ValueError("EventCondition requires either function or SymPy expression.")
+        if self.function is not None and self.expression is not None:
+            raise ValueError("EventCondition cannot define both function and expression.")
         if self.direction not in {-1, 0, 1}:
             raise ValueError("EventCondition.direction must be -1, 0, or 1.")
 
@@ -56,9 +69,22 @@ class StateTransition:
     # 状态跃迁的方程应该是个方程组
     equations: dict[str, str] | None = None
 
+    @classmethod
+    def identity(cls, name: str = "identity_transition") -> "StateTransition":
+        return cls(name=name, equations={})
+
+    @classmethod
+    def from_equations(cls, name: str, equations: dict[str, str]) -> "StateTransition":
+        return cls(name=name, equations=dict(equations))
+
     def __post_init__(self) -> None:
+        require_identifier(self.name, kind="transition name")
         if self.function is None and self.equations is None:
             raise ValueError("StateTransition requires either function or SymPy equations.")
+        if self.function is not None and self.equations is not None:
+            raise ValueError("StateTransition cannot define both function and equations.")
+        if self.equations is not None:
+            require_identifiers(self.equations, kind=f"Transition '{self.name}' equation")
 
     def apply(self, state: State, parameters: Parameters, time: float = 0.0) -> State:
         if self.function is not None:
@@ -85,17 +111,47 @@ class PhysicsEvent:
     condition: EventCondition
     transition: StateTransition | None = None
 
+    @classmethod
+    def terminal(
+        cls,
+        name: str,
+        expression: str,
+        *,
+        direction: int = 0,
+        transition: StateTransition | dict[str, str] | None = None,
+    ) -> "PhysicsEvent":
+        if transition is None:
+            state_transition = StateTransition.identity(f"{name}_transition")
+        elif isinstance(transition, dict):
+            state_transition = StateTransition.from_equations(f"{name}_transition", transition)
+        else:
+            state_transition = transition
+        return cls(
+            name=name,
+            condition=EventCondition.from_expression(expression, terminal=True, direction=direction),
+            transition=state_transition,
+        )
+
+    def __post_init__(self) -> None:
+        require_identifier(self.name, kind="event name")
+        if self.transition is not None and not self.condition.terminal:
+            raise ValueError(
+                f"Event '{self.name}' has a transition, so its condition must be terminal."
+            )
+
 
 def time_end_event(name: str = "segment_time_end") -> PhysicsEvent:
-    return PhysicsEvent(
+    return PhysicsEvent.terminal(
         name,
-        EventCondition(expression="t - t_end", terminal=True, direction=1),
-        StateTransition(name="segment_time_end_transition", equations={}),
+        "t - t_end",
+        direction=1,
+        transition=StateTransition.identity(f"{name}_transition"),
     )
 
 def time_countdown_event(countdown: int, name: str = "segment_time_countdown") -> PhysicsEvent:
-    return PhysicsEvent(
+    return PhysicsEvent.terminal(
         name,
-        EventCondition(expression=f"t - t_start - {countdown}", terminal=True, direction=1),
-        StateTransition(name="segment_time_countdown_transition", equations={}),
+        f"t - t_start - {countdown}",
+        direction=1,
+        transition=StateTransition.identity(f"{name}_transition"),
     )

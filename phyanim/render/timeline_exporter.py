@@ -23,7 +23,8 @@ class TimelineExporter:
                     "state_variables": {
                         name: asdict(variable) for name, variable in obj.state_variables.items()
                     },
-                    "render_model": obj.render_model,
+                    "cartesian_position": obj.cartesian_position_variables(),
+                    "has_mobject": obj.mobject is not None,
                 }
                 for object_id, obj in animation.objects.items()
             },
