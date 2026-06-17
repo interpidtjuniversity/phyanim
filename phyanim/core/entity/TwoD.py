@@ -136,6 +136,22 @@ class CircularArcTrack(VMobject):
         self.set_stroke(color=color, width=stroke_width)
         self.set_fill(opacity=0)
 
+    def set_center(self, center: np.ndarray):
+        self.center = _to_3d(np.array(center))
+        self.set_points_as_corners(
+            _arc_points(
+                center=self.center,
+                radius=self.radius,
+                start_angle=self.start_angle,
+                end_angle=self.end_angle,
+                num_points=self.num_points,
+            )
+        )
+
+    def point_change_callbacks(self):
+        self.center_change_callback = lambda x, y: self.set_center(np.array([x, y, 0.0]))
+        return [self.center_change_callback]
+
 
 class RightSemicircleTrack(CircularArcTrack):
     """Right half of a vertical circular track, from bottom to top by default."""

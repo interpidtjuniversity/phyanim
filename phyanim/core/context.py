@@ -279,6 +279,15 @@ class PhysicsContext(Context):
                         "but its mobject implements neither set_control_points() "
                         "nor point_change_callbacks()."
                     )
+            elif len(cartesian_position_variables) == 1:
+                if hasattr(mob, "point_change_callbacks"):
+                    callbacks = mob.point_change_callbacks()
+
+                    if len(callbacks) != 1:
+                        raise ValueError(
+                            f"Object '{obj_id}' has 1 cartesian position, "
+                            f"but its mobject provides {len(callbacks)} callbacks."
+                        )
             # 给物理实体添加updater
             mob.add_updater(self.make_obj_position_updater(obj_id, callbacks, tracker))
 
@@ -295,6 +304,12 @@ class PhysicsContext(Context):
             t = tracker.get_value()
             physics_t = self.render_to_physics_mapping_func(t)
             cartesian_positions = self.eval_position(current_obj_id, physics_t)
+
+            if current_callbacks is not None:
+                for callback, position in zip(current_callbacks, cartesian_positions):
+                    x, y = position
+                    callback(x, y)
+                return
 
             if len(cartesian_positions) == 1:
                 x, y = cartesian_positions[0]

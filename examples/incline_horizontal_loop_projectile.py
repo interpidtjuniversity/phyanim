@@ -10,8 +10,11 @@ from manim import BLUE, GREEN, WHITE, YELLOW
 
 from phyanim import PhysicsAnimation, PhysicsEvent, PointParticle, StateTransition, object2d
 from phyanim.core.entity.TwoD import RightSemicircleTrack, StraightTrack
+from phyanim.core.enhance.annotation import Annotation, AnnotationActivation, ArrowContent, TextContent
+from phyanim.core.enhance.transition import Transition
+from phyanim.core.enhance.trigger import CrossingTrigger, Trigger
 from phyanim.render import PhyAnimationMultiLayerScene2D
-
+from phyanim.core.enhance.timewrapper import TimeWrapper
 
 def build_animation() -> PhysicsAnimation:
     """A ball slides down an incline, crosses rough flat track, loops, and lands."""
@@ -150,6 +153,16 @@ def build_animation() -> PhysicsAnimation:
     ball_states = ["ball_x", "ball_y", "ball_vx", "ball_vy", "ball_phi", "ball_omega"]
     base_owners = {name: "ball" for name in ball_states}
 
+    derived = {
+        "incline_formula_x": str(incline_start_x / 2),
+        "incline_formula_y": str(incline_start_y / 2 + 1.2),
+        "horizontal_formula_x": str(horizontal_length / 2),
+        "horizontal_formula_y": "1.0",
+        "loop_top_text_x": str(loop_center_x),
+        "loop_top_text_y": str(2 * radius + 0.5),
+        "track_end_x_derived": str(horizontal_end_x),
+    }
+
     animation.add_equation_segment(
         "slide_down_incline",
         objects=["ball"],
@@ -162,6 +175,7 @@ def build_animation() -> PhysicsAnimation:
             "ball_omega": "0.0",
         },
         owners=base_owners,
+        derived=derived,
         duration=20,
         end_event=PhysicsEvent.terminal(
             "reaches_horizontal_track",
@@ -191,6 +205,7 @@ def build_animation() -> PhysicsAnimation:
             "ball_omega": "0.0",
         },
         owners=base_owners,
+        derived=derived,
         duration=20,
         end_event=PhysicsEvent.terminal(
             "enters_smooth_loop",
@@ -221,6 +236,7 @@ def build_animation() -> PhysicsAnimation:
             "ball_omega": "-g*sin(ball_phi)/R",
         },
         owners=base_owners,
+        derived=derived,
         duration=20,
         end_event=PhysicsEvent.terminal(
             "leaves_loop_top",
@@ -250,6 +266,7 @@ def build_animation() -> PhysicsAnimation:
             "ball_omega": "0.0",
         },
         owners=base_owners,
+        derived=derived,
         duration=20,
         end_event=PhysicsEvent.terminal(
             "lands_on_horizontal_track",
@@ -278,12 +295,88 @@ def build_animation() -> PhysicsAnimation:
             "ball_omega": "0.0",
         },
         owners=base_owners,
+        derived=derived,
         duration=1.0,
         end_event=PhysicsEvent.terminal(
             "finish_after_landing_hold",
             "t - t_start - 0.6",
             direction=1,
         ),
+    )
+
+    # === Annotations and Transitions ===
+    physics_layer = animation.get_physics_layer()
+
+    # Velocity arrow (always visible while ball is moving)
+    physics_layer.add_annotation(
+        Annotation(
+            id="velocity_arrow",
+            ann_type="while",
+            content=ArrowContent(
+                pos_variables=("ball_x", "ball_y"),
+                shift_variables=("ball_vx", "ball_vy"),
+                scale=0.15,
+                color="yellow",
+                tip_length=0.12,
+            ),
+            activation=AnnotationActivation(
+                trigger=Trigger(expression="ball_vx**2 + ball_vy**2 > 0.01"),
+            ),
+        )
+    )
+
+    # Incline formula transition: mgsinθ - μmgcosθ = ma
+    physics_layer.add_transition(
+        Transition(
+            id="incline_formula",
+            group_strings=[
+                ["\\text{牛顿第二定律:} mg\\sin\\theta - \\mu mg\\cos\\theta = ma"],
+            ],
+            triggers=[
+                CrossingTrigger(expression="ball_vx**2 + ball_vy**2 - 0.01", direction=1),
+                CrossingTrigger(expression="ball_x", direction=1),
+            ],
+            pos_variables=("incline_formula_x", "incline_formula_y"),
+            group_dir={},
+            font_size=30,
+            style="scale",
+            duration=0.1,
+        )
+    )
+
+    # Horizontal track formula transition: -μmg = ma
+    physics_layer.add_transition(
+        Transition(
+            id="horizontal_formula",
+            group_strings=[
+                ["-\\mu mg = ma"],
+            ],
+            triggers=[
+                CrossingTrigger(expression="ball_x - 0.01", direction=1),
+                CrossingTrigger(expression="ball_x - track_end_x_derived", direction=1),
+            ],
+            pos_variables=("horizontal_formula_x", "horizontal_formula_y"),
+            group_dir={},
+            font_size=30,
+            style="scale",
+            duration=0.1,
+        )
+    )
+
+    # Loop top text: v = sqrt(gr)
+    physics_layer.add_annotation(
+        Annotation(
+            id="loop_top_text",
+            ann_type="while",
+            content=TextContent(
+                txt="v=sqrt(gr)",
+                pos_variables=("loop_top_text_x", "loop_top_text_y"),
+                font_size=28,
+            ),
+            activation=AnnotationActivation(
+                trigger=Trigger(expression="ball_phi > 2.5"),
+            ),
+        )
     )
 
     return animation

@@ -4,7 +4,7 @@ from phyanim.core.enhance.asserts import Content
 from phyanim.core.enhance.trigger import Trigger
 from manim import VGroup, DOWN, RIGHT, LEFT, UP
 
-from manim import MathTex
+from manim import MathTex, TexTemplateLibrary
 
 import numpy as np
 
@@ -18,13 +18,13 @@ class TransitionContent(Content):
         # 这里一会加tex的类型判断，是普通文本还是math tex
         for group_idx, group_tex_strings in enumerate(tex_strings):
             if direction.get(group_idx, "down") == "down":
-                self.groups.append(VGroup([MathTex(tex, font_size=font_size) for tex in group_tex_strings]).arrange(DOWN))
+                self.groups.append(VGroup([MathTex(tex, font_size=font_size, tex_template=TexTemplateLibrary.ctex) for tex in group_tex_strings]).arrange(DOWN))
             elif direction.get(group_idx, "down") == "right":
-                self.groups.append(VGroup([MathTex(tex, font_size=font_size) for tex in group_tex_strings]).arrange(RIGHT))
+                self.groups.append(VGroup([MathTex(tex, font_size=font_size, tex_template=TexTemplateLibrary.ctex) for tex in group_tex_strings]).arrange(RIGHT))
             elif direction.get(group_idx, "down") == "left":
-                self.groups.append(VGroup([MathTex(tex, font_size=font_size) for tex in group_tex_strings]).arrange(LEFT))
+                self.groups.append(VGroup([MathTex(tex, font_size=font_size, tex_template=TexTemplateLibrary.ctex) for tex in group_tex_strings]).arrange(LEFT))
             elif direction.get(group_idx, "down") == "up":
-                self.groups.append(VGroup([MathTex(tex, font_size=font_size) for tex in group_tex_strings]).arrange(UP))
+                self.groups.append(VGroup([MathTex(tex, font_size=font_size, tex_template=TexTemplateLibrary.ctex) for tex in group_tex_strings]).arrange(UP))
             else:
                 raise ValueError(f"Invalid direction: {direction.get(group_idx, 'down')}")
 
