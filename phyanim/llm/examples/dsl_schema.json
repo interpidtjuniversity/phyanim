@@ -1,0 +1,343 @@
+{
+  "scene": {
+    "dimension": 2,
+    "engine": "scipy",
+    "sample_dt": 0.016666666666666666
+  },
+  "global_parameters": {
+    "k": 1.0,
+    "m1": 2.0,
+    "m2": 1.0
+  },
+  "objects": [
+    {
+      "id": "spring",
+      "type": "object2d",
+      "states": ["start_x", "start_y", "end_x", "end_y"],
+      "cartesian_position": [["start_x", "start_y"], ["end_x", "end_y"]],
+      "geometry": "spring",
+      "geometry_params": {
+        "start": [-1, 0],
+        "end": [1, 0],
+        "radius": 0.1,
+        "color": "red",
+        "stroke_width": 2
+      }
+    },
+    {
+      "id": "ball1",
+      "type": "point_particle",
+      "mass": 1.0,
+      "radius": 0.1,
+      "color": "blue",
+      "state_names": {
+        "x": "ball1x",
+        "y": "ball1y",
+        "vx": "ball1vx"
+      },
+      "cartesian_position": [["ball1x", "ball1y"]],
+      "geometry": "circle",
+      "geometry_params": {"radius": 0.1, "color": "blue"}
+    },
+    {
+      "id": "ball2",
+      "type": "point_particle",
+      "mass": 1.0,
+      "radius": 0.1,
+      "color": "green",
+      "state_names": {
+        "x": "ball2x",
+        "y": "ball2y",
+        "vx": "ball2vx"
+      },
+      "cartesian_position": [["ball2x", "ball2y"]],
+      "geometry": "circle",
+      "geometry_params": {"radius": 0.1, "color": "green"}
+    }
+  ],
+  "initial_states": {
+    "spring": {"start_x": -1.0, "start_y": 0.0, "end_x": 1.0, "end_y": 0.0},
+    "ball1": {"ball1x": -5.0, "ball1y": 0.0, "ball1vx": 1.0},
+    "ball2": {"ball2x": 1.0, "ball2y": 0.0, "ball2vx": 0.0}
+  },
+  "segments": [
+    {
+      "id": "seg1",
+      "object_ids": ["spring", "ball1", "ball2"],
+      "equations": {
+        "start_x": "0.0",
+        "start_y": "0.0",
+        "end_x": "0.0",
+        "end_y": "0.0",
+        "ball1y": "0.0",
+        "ball2y": "0.0",
+        "ball1x": "ball1vx",
+        "ball2x": "ball2vx",
+        "ball1vx": "0.0",
+        "ball2vx": "0.0"
+      },
+      "owners": {
+        "start_x": "spring",
+        "start_y": "spring",
+        "end_x": "spring",
+        "end_y": "spring",
+        "ball1x": "ball1",
+        "ball1y": "ball1",
+        "ball1vx": "ball1",
+        "ball2x": "ball2",
+        "ball2y": "ball2",
+        "ball2vx": "ball2"
+      },
+      "derived": {
+        "spring_x": "(start_x + end_x)/2",
+        "spring_y": "-0.5",
+        "ball1vy": "0.0",
+        "ball2vy": "0.0"
+      },
+      "duration": 100,
+      "end_event": {
+        "expression": "ball1x - start_x",
+        "direction": 1,
+        "transition": {}
+      }
+    },
+    {
+      "id": "seg2",
+      "object_ids": ["spring", "ball1", "ball2"],
+      "equations": {
+        "start_x": "ball1vx",
+        "start_y": "0.0",
+        "end_x": "ball2vx",
+        "end_y": "0.0",
+        "ball1y": "0.0",
+        "ball2y": "0.0",
+        "ball1x": "ball1vx",
+        "ball2x": "ball2vx",
+        "ball1vx": "-k*(2.0-end_x+start_x)/m1",
+        "ball2vx": "k*(2.0-end_x+start_x)/m2"
+      },
+      "owners": {
+        "start_x": "spring",
+        "start_y": "spring",
+        "end_x": "spring",
+        "end_y": "spring",
+        "ball1x": "ball1",
+        "ball1y": "ball1",
+        "ball1vx": "ball1",
+        "ball2x": "ball2",
+        "ball2y": "ball2",
+        "ball2vx": "ball2"
+      },
+      "derived": {
+        "spring_x": "(start_x + end_x)/2",
+        "spring_y": "-0.5",
+        "ball1vy": "0.0",
+        "ball2vy": "0.0"
+      },
+      "duration": 100,
+      "end_event": {
+        "expression": "end_x - start_x - 2",
+        "direction": 1,
+        "transition": {}
+      }
+    },
+    {
+      "id": "seg3",
+      "object_ids": ["spring", "ball1", "ball2"],
+      "equations": {
+        "start_x": "ball1vx",
+        "start_y": "0.0",
+        "end_x": "ball1vx",
+        "end_y": "0.0",
+        "ball1y": "0.0",
+        "ball2y": "0.0",
+        "ball1x": "ball1vx",
+        "ball2x": "ball2vx",
+        "ball1vx": "0.0",
+        "ball2vx": "0.0"
+      },
+      "owners": {
+        "start_x": "spring",
+        "start_y": "spring",
+        "end_x": "spring",
+        "end_y": "spring",
+        "ball1x": "ball1",
+        "ball1y": "ball1",
+        "ball1vx": "ball1",
+        "ball2x": "ball2",
+        "ball2y": "ball2",
+        "ball2vx": "ball2"
+      },
+      "derived": {
+        "spring_x": "(start_x + end_x)/2",
+        "spring_y": "-0.5",
+        "ball1vy": "0.0",
+        "ball2vy": "0.0"
+      },
+      "duration": 100,
+      "end_event": {
+        "type": "countdown",
+        "value": 2
+      }
+    }
+  ],
+  "physics_layer": {
+    "annotations": [
+      {
+        "id": "ball1_v_arrow",
+        "type": "while",
+        "content": {
+          "kind": "arrow",
+          "pos_variables": ["ball1x", "ball1y"],
+          "shift_variables": ["ball1vx", "ball1vy"],
+          "scale": 0.5,
+          "color": "red",
+          "tip_length": 0.1
+        },
+        "trigger": {"expression": "t > 0", "direction": 0}
+      },
+      {
+        "id": "ball1_v_label",
+        "type": "while",
+        "content": {
+          "kind": "text",
+          "text": "ball1_v",
+          "pos_variables": ["ball1x", "0.5"],
+          "font_size": 24
+        },
+        "trigger": {"expression": "t > 0", "direction": 0}
+      },
+      {
+        "id": "ball2_v_arrow",
+        "type": "while",
+        "content": {
+          "kind": "arrow",
+          "pos_variables": ["ball2x", "ball2y"],
+          "shift_variables": ["ball2vx", "ball2vy"],
+          "scale": 0.5,
+          "color": "red",
+          "tip_length": 0.1
+        },
+        "trigger": {"expression": "t > 0", "direction": 0}
+      },
+      {
+        "id": "ball2_v_label",
+        "type": "while",
+        "content": {
+          "kind": "text",
+          "text": "ball2_v",
+          "pos_variables": ["ball2x", "0.5"],
+          "font_size": 24
+        },
+        "trigger": {"expression": "t > 0", "direction": 0}
+      },
+      {
+        "id": "spring_compress",
+        "type": "between",
+        "content": {
+          "kind": "text",
+          "text": "弹簧被压缩",
+          "pos_variables": ["spring_x", "spring_y"],
+          "font_size": 24
+        },
+        "start_trigger": {"expression": "ball1x - start_x", "direction": 1},
+        "end_trigger": {"expression": "ball2x - ball1x - 2", "direction": 1}
+      },
+      {
+        "id": "time_range1",
+        "type": "time_range",
+        "content": {
+          "kind": "text",
+          "text": "马上碰撞",
+          "pos_variables": ["start_x", "1"],
+          "font_size": 24
+        },
+        "trigger": {"expression": "ball1x - start_x", "direction": 1},
+        "advance": 2.0,
+        "delay": 0.0
+      },
+      {
+        "id": "time_range2",
+        "type": "time_range",
+        "content": {
+          "kind": "text",
+          "text": "马上分离",
+          "pos_variables": ["ball2x", "2"],
+          "font_size": 24
+        },
+        "trigger": {"expression": "ball2x - ball1x - 2", "direction": 1},
+        "advance": 1.0,
+        "delay": 0.0
+      },
+      {
+        "id": "time_range3",
+        "type": "time_range",
+        "content": {
+          "kind": "text",
+          "text": "碰撞完成",
+          "pos_variables": ["ball2x", "2"],
+          "font_size": 24
+        },
+        "trigger": {"expression": "ball2x - ball1x - 2", "direction": 1},
+        "advance": 0.0,
+        "delay": 2.0
+      }
+    ],
+    "transitions": [
+      {
+        "id": "formula_derivation",
+        "groups": [
+          ["m_{1}v_{1}+m_{2}v_{2}=m_{1}v_{1}'+m_{2}v_{2}'", "\\frac{1}{2}m_{1}v_{1}^2+\\frac{1}{2}m_{2}v_{2}^2=\\frac{1}{2}m_{1}{v_{1}'}^{2}+\\frac{1}{2}m_{2}{v_{2}'}^{2}", "m_{1}=2kg, m_{2}=1kg", "v_{1}=1m/s, v_{2}=0"],
+          ["v_{1}'=\\frac{1}{3}m/s", "v_{2}'=\\frac{4}{3}m/s"]
+        ],
+        "triggers": [
+          {"expression": "t-2", "direction": 1},
+          {"expression": "t-7", "direction": 1},
+          {"expression": "t-10", "direction": 1}
+        ],
+        "pos_variables": ["0", "-2"],
+        "group_dir": {},
+        "style": "spin",
+        "duration": 0.5,
+        "font_size": 24
+      }
+    ]
+  },
+  "render_layer": {
+    "sub_animations": [
+      {
+        "time_wrapper": {
+          "id": "time_warp",
+          "type": "freeze",
+          "trigger": {"expression": "ball1x - start_x", "direction": 1},
+          "extend_to": 5
+        },
+        "annotations": [
+          {
+            "id": "freeze_label1",
+            "type": "while",
+            "content": {
+              "kind": "text",
+              "text": "这个是layer层的文本，冻结1s后显示",
+              "pos_variables": ["0", "2.5"],
+              "font_size": 24
+            },
+            "trigger": {"expression": "local_t > 1", "direction": 0}
+          },
+          {
+            "id": "freeze_label2",
+            "type": "while",
+            "content": {
+              "kind": "text",
+              "text": "这个是layer层的文本，冻结3s后显示",
+              "pos_variables": ["0", "3"],
+              "font_size": 24
+            },
+            "trigger": {"expression": "local_t > 3", "direction": 0}
+          }
+        ],
+        "transitions": []
+      }
+    ]
+  }
+}
