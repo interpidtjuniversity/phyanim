@@ -82,6 +82,7 @@ class DeepSeekClient:
             ],
             "temperature": 0.2,
             "response_format": {"type": "json_object"},
+            "reasoning_effort": "max",
         }
         response = self._post("/chat/completions", payload)
         content = response["choices"][0]["message"]["content"]
