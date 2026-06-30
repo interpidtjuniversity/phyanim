@@ -90,13 +90,13 @@ class DefaultTimeWrapperSolver:
                 return self.time_ranges[left_wrapper_idx][1] + t - self.wrapper_time_ranges[left_wrapper_idx][1]
         
         def physics_to_render_mapping_func(t: float) -> Any:
-            for idx, (start, end, _) in enumerate(self.time_ranges):
+            for idx, (start, end, wid) in enumerate(self.time_ranges):
                 if start <= t <= end:
                     # 如果是slow，则该区间慢放
-                    if self.time_wrappers[wrapper_id].type == "slow":
+                    if self.time_wrappers[wid].type == "slow":
                         return self.wrapper_time_ranges[idx][0] + (t - start) * (self.wrapper_time_ranges[idx][1] - self.wrapper_time_ranges[idx][0]) / (end - start)
                     # 如果是freeze，返回整个render_t区间，需要业务层自己做遍历
-                    elif self.time_wrappers[wrapper_id].type == "freeze":
+                    elif self.time_wrappers[wid].type == "freeze":
                         return (self.wrapper_time_ranges[idx][0], self.wrapper_time_ranges[idx][1])
             
             left_idx = -1
