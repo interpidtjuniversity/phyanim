@@ -34,6 +34,11 @@ class PhysicsSegment:
     derived_quantities: dict[str, DerivedFunction] = field(default_factory=dict)
     derived_equations: dict[str, str] = field(default_factory=dict)
 
+    # kinematic 模式：闭式解表达式（不走 ODE 积分）
+    kinematic_expressions: dict[str, str] | None = None
+    # kinematic 模式：采样点数组
+    kinematic_samples: dict[str, dict] | None = None
+
     # 阶段持续时长，这个时长不具有一般意义，因为最终阶段的结束由该阶段后接的事件决定
     duration: float = 1.0
 
@@ -89,6 +94,65 @@ class PhysicsSegment:
             duration=duration,
         )
 
+    @classmethod
+    def from_kinematic(
+        cls,
+        segment_id: str,
+        *,
+        objects: list[str],
+        state_vector: list[str],
+        expressions: dict[str, str],
+        duration: float,
+        owners: dict[str, str] | None = None,
+        parameters: dict[str, float] | None = None,
+        derived: dict[str, str] | None = None,
+    ) -> "PhysicsSegment":
+        """Build a segment from closed-form kinematic expressions.
+
+        Each expression maps a state variable name to a SymPy expression
+        of ``t`` (and optionally parameters).  The solver evaluates these
+        expressions directly at sample times instead of integrating an ODE.
+        """
+        return cls(
+            segment_id=segment_id,
+            object_ids=list(objects),
+            state_vector=list(state_vector),
+            state_owners=owners,
+            kinematic_expressions=dict(expressions),
+            parameters=dict(parameters or {}),
+            derived_equations=dict(derived or {}),
+            duration=duration,
+        )
+
+    @classmethod
+    def from_samples(
+        cls,
+        segment_id: str,
+        *,
+        objects: list[str],
+        state_vector: list[str],
+        samples: dict[str, dict],
+        duration: float,
+        owners: dict[str, str] | None = None,
+        parameters: dict[str, float] | None = None,
+        derived: dict[str, str] | None = None,
+    ) -> "PhysicsSegment":
+        """Build a segment from pre-computed sample arrays.
+
+        ``samples`` is ``{state_name: {"times": [...], "values": [...]}}``.
+        The solver linearly interpolates between sample points.
+        """
+        return cls(
+            segment_id=segment_id,
+            object_ids=list(objects),
+            state_vector=list(state_vector),
+            state_owners=owners,
+            kinematic_samples=dict(samples),
+            parameters=dict(parameters or {}),
+            derived_equations=dict(derived or {}),
+            duration=duration,
+        )
+
     def __post_init__(self) -> None:
         require_identifier(self.segment_id, kind="segment_id")
         if not self.object_ids:
@@ -117,13 +181,28 @@ class PhysicsSegment:
         unknown_owners = set(self.state_owners.values()) - set(self.object_ids)
         if unknown_owners:
             raise ValueError(f"Segment '{self.segment_id}' has unknown state owners: {sorted(unknown_owners)}")
-        if self.derivative is None and self.equations is None:
+        if self.derivative is None and self.equations is None and self.kinematic_expressions is None and self.kinematic_samples is None:
             raise ValueError(
-                f"Segment '{self.segment_id}' requires either callable derivative or SymPy equations."
+                f"Segment '{self.segment_id}' requires either callable derivative, SymPy equations, kinematic expressions, or kinematic samples."
             )
-        if self.derivative is not None and self.equations is not None:
+        # kinematic 模式的校验
+        if self.kinematic_expressions is not None:
+            require_identifiers(self.kinematic_expressions, kind=f"Segment '{self.segment_id}' kinematic expression")
+            missing = [name for name in self.state_vector if name not in self.kinematic_expressions]
+            if missing:
+                raise ValueError(f"Segment '{self.segment_id}' missing kinematic expressions for states: {missing}")
+            extra = sorted(set(self.kinematic_expressions) - set(self.state_vector))
+            if extra:
+                raise ValueError(f"Segment '{self.segment_id}' has kinematic expressions for unknown states: {extra}")
+        if self.kinematic_samples is not None:
+            missing = [name for name in self.state_vector if name not in self.kinematic_samples]
+            if missing:
+                raise ValueError(f"Segment '{self.segment_id}' missing kinematic samples for states: {missing}")
+        # kinematic 模式与 ODE 模式互斥
+        mode_count = sum(1 for x in [self.derivative, self.equations, self.kinematic_expressions, self.kinematic_samples] if x is not None)
+        if mode_count > 1:
             raise ValueError(
-                f"Segment '{self.segment_id}' cannot define both callable derivative and SymPy equations."
+                f"Segment '{self.segment_id}' cannot define more than one of: derivative, equations, kinematic_expressions, kinematic_samples."
             )
         if self.equations is not None:
             require_identifiers(self.equations, kind=f"Segment '{self.segment_id}' equation")

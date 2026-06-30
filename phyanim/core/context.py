@@ -9,9 +9,11 @@ from phyanim.core.enhance.trigger import CrossingTrigger, Trigger
 from phyanim.core.enhance.transition import Transition
 
 import sympy as sp
-from manim import ValueTracker, Mobject, VGroup, PI
+from manim import ValueTracker, Mobject, VGroup, PI, LEFT, RIGHT, DOWN, UP, RED, GREEN, BLUE, WHITE, YELLOW, YELLOW_C, RED_C, BLUE_C, GREEN_C, ORANGE, PURPLE, TEAL_C, GOLD_C, MAROON_C, PURE_RED, PURE_GREEN, PURE_BLUE
 import numpy as np
 from phyanim.utils.util import is_numeric
+from phyanim.core.enhance.visual_binding import VisualBinding
+from phyanim.core.expressions import SympyExpressionCompiler
 
 class Context:
 
@@ -300,6 +302,15 @@ class PhysicsContext(Context):
         current_callbacks=None,
         tracker: ValueTracker = None,
     ):
+        obj = self.objects[current_obj_id]
+        # 预编译 visual_bindings 的表达式
+        binding_compiled = {}
+        if obj.visual_bindings:
+            for binding in obj.visual_bindings:
+                symbol_names = set(binding.variables) | {"t"}
+                compiler = SympyExpressionCompiler()
+                binding_compiled[id(binding)] = compiler.compile(binding.expression, symbol_names=symbol_names)
+
         def updater(m):
             t = tracker.get_value()
             physics_t = self.render_to_physics_mapping_func(t)
@@ -314,12 +325,36 @@ class PhysicsContext(Context):
             if len(cartesian_positions) == 1:
                 x, y = cartesian_positions[0]
                 m.move_to(np.array([x, y, 0.0]))
-                return
 
-            for callback, position in zip(current_callbacks, cartesian_positions):
+            # Visual bindings: 更新颜色/透明度/缩放/旋转等视觉属性
+            for binding in obj.visual_bindings:
+                expr = binding_compiled[id(binding)]
+                # 收集变量值
+                state_dict = {}
+                for var_name in binding.variables:
+                    try:
+                        state_dict[var_name] = self.value_at_time(var_name, physics_t)
+                    except (KeyError, ValueError):
+                        pass
+                val = expr.evaluate(state_dict, {}, physics_t)
+
+                if binding.attribute == "color":
+                    color = _resolve_color(val)
+                    if color is not None:
+                        m.set_color(color)
+                elif binding.attribute == "opacity":
+                    m.set_opacity(float(val))
+                elif binding.attribute == "stroke_width":
+                    m.set_stroke(width=float(val))
+                elif binding.attribute == "scale":
+                    _apply_scale(m, float(val))
+                elif binding.attribute == "rotation":
+                    _apply_rotation(m, float(val), binding.center)
+
+            for callback, position in zip(current_callbacks or [], cartesian_positions):
                 x, y = position
                 callback(x, y)
-        return updater    
+        return updater
 
 
 # 注释上下文，需要使用AnimationContext和annotationsolver来进行初始化
@@ -586,3 +621,71 @@ class TransitionContext(Context):
             group_container = self.make_sequential(transition, groups, self.timeline[trans_id], tracker, physics_ctx, transition.style, transition.duration, transition.smooth_func)
             entities.append(group_container)
         return entities
+
+
+# ---------------------------------------------------------------------------
+# Visual binding helpers
+# ---------------------------------------------------------------------------
+
+# 颜色名到 manim 颜色对象的映射表，供 visual_binding 的 color 属性使用。
+_COLOR_MAP = {
+    "red": RED, "RED": RED,
+    "green": GREEN, "GREEN": GREEN,
+    "blue": BLUE, "BLUE": BLUE,
+    "white": WHITE, "WHITE": WHITE,
+    "yellow": YELLOW, "YELLOW": YELLOW,
+    "yellow_c": YELLOW_C, "YELLOW_C": YELLOW_C,
+    "red_c": RED_C, "RED_C": RED_C,
+    "blue_c": BLUE_C, "BLUE_C": BLUE_C,
+    "green_c": GREEN_C, "GREEN_C": GREEN_C,
+    "orange": ORANGE, "ORANGE": ORANGE,
+    "purple": PURPLE, "PURPLE": PURPLE,
+    "teal_c": TEAL_C, "TEAL_C": TEAL_C,
+    "gold_c": GOLD_C, "GOLD_C": GOLD_C,
+    "maroon_c": MAROON_C, "MAROON_C": MAROON_C,
+    "pure_red": PURE_RED, "PURE_RED": PURE_RED,
+    "pure_green": PURE_GREEN, "PURE_GREEN": PURE_GREEN,
+    "pure_blue": PURE_BLUE, "PURE_BLUE": PURE_BLUE,
+}
+
+
+def _resolve_color(val) -> object | None:
+    """把 visual binding 表达式返回值解析为 manim 颜色对象。
+
+    支持两种形式：
+    - 字符串颜色名（如 "RED"、"blue"）
+    - 数值（取整后作为颜色索引，暂不支持）
+    """
+    if isinstance(val, str):
+        return _COLOR_MAP.get(val)
+    if isinstance(val, (int, float)):
+        # 数值模式暂不支持，预留接口
+        return None
+    return None
+
+
+# 每个 mobject 上记录上一次 scale/rotation 值的属性名
+_SCALE_ATTR = "_phyanim_last_scale"
+_ROT_ATTR = "_phyanim_last_rotation"
+
+
+def _apply_scale(m, target_scale: float) -> None:
+    """相对缩放：基于上一次的 scale 值计算缩放比。"""
+    if target_scale <= 0:
+        target_scale = 0.01
+    last = getattr(m, _SCALE_ATTR, 1.0)
+    ratio = target_scale / last
+    m.scale(ratio)
+    setattr(m, _SCALE_ATTR, target_scale)
+
+
+def _apply_rotation(m, target_angle: float, center=None) -> None:
+    """相对旋转：基于上一次的角度值计算旋转增量。"""
+    last = getattr(m, _ROT_ATTR, 0.0)
+    delta = target_angle - last
+    if abs(delta) > 1e-10:
+        if center is not None:
+            m.rotate(delta, about_point=np.array([center[0], center[1], 0.0]))
+        else:
+            m.rotate(delta)
+    setattr(m, _ROT_ATTR, target_angle)

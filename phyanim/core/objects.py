@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 
 from phyanim.core.state import Parameter, StateVariable
 from phyanim.core.validation import normalize_numeric_mapping, require_identifier, require_identifiers
+from phyanim.core.enhance.visual_binding import VisualBinding
 from manim import Mobject, Circle
+
 
 @dataclass
 class PhysicObject2D:
@@ -18,6 +20,12 @@ class PhysicObject2D:
 
     # 持有一个manim的mobject，用于渲染
     mobject: Mobject | None = None
+
+    # Visual bindings: 状态变量 → 视觉属性（颜色/透明度/缩放/旋转等）
+    visual_bindings: list[VisualBinding] = field(default_factory=list)
+
+    # Visual bindings: state variables → visual attributes (color, opacity, etc.)
+    visual_bindings: list["VisualBinding"] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         require_identifier(self.object_id, kind="object_id")

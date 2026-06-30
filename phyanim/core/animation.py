@@ -13,6 +13,7 @@ from phyanim.core.validation import SymbolRegistry, normalize_numeric_mapping, r
 from phyanim.solver.solver import Solver
 from phyanim.solver.scipy_solver import ScipySegmentSolver
 from phyanim.solver.heyoka_solver import HeyokaSegmentSolver
+from phyanim.solver.kinematic_solver import KinematicSegmentSolver
 from phyanim.core.layer import Layer
 
 @dataclass
@@ -146,7 +147,9 @@ class PhysicsAnimation:
             return ScipySegmentSolver(sample_dt=self.sample_dt)
         if self.engine == "heyoka":
             return HeyokaSegmentSolver(sample_dt=self.sample_dt)
-        raise ValueError(f"Unknown engine: {self.engine}. Supported engines are 'scipy' and 'heyoka'.")
+        if self.engine == "kinematic":
+            return KinematicSegmentSolver(sample_dt=self.sample_dt)
+        raise ValueError(f"Unknown engine: {self.engine}. Supported engines are 'scipy', 'heyoka', and 'kinematic'.")
 
     def get_physics_layer(self) -> Layer:     
         if self.physics_layer is not None:
@@ -164,7 +167,7 @@ class PhysicsAnimation:
     def solve_simulation(self, solver: Solver | None = None) -> PhysicsContext:
         if self.initial_keyframe is None:
             raise ValueError("PhysicsAnimation requires an initial keyframe before solving.")
-        solver = solver or ScipySegmentSolver()
+        solver = solver or self._build_solver()
         self.keyframes = [self.initial_keyframe]
         self.trajectories = []
         self.segment_results = []
