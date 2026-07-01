@@ -1,2 +1,0 @@
-# This file is used internally by FFMPEG.
-file 'file:D:/clcy/pythonplayground/daily/phyanim/media/videos/1080p60/partial_movie_files/PhyAnimationMultiLayerScene2D/uncached_00000.mp4'

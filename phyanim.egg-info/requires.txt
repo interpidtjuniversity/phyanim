@@ -1,0 +1,7 @@
+numpy
+scipy
+sympy
+manim
+matplotlib
+flask
+manim-voiceover

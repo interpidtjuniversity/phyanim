@@ -9,6 +9,55 @@ from manim import Mobject, Circle
 
 
 @dataclass
+class TraceConfig:
+    """轨迹追踪配置。
+
+    mode="full":  显示从开始到当前时刻的完整轨迹。
+    mode="tail":  只保留最近 keeping_t 秒（物理时间）的轨迹。
+    """
+
+    mode: str = "full"           # "full" | "tail"
+    keeping_t: float = 2.0       # tail 模式下保留的物理时间长度（秒）
+    color: str = "white"         # 轨迹颜色
+    stroke_width: float = 2.0    # 轨迹线宽
+    opacity: float = 0.6         # 轨迹透明度
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("full", "tail"):
+            raise ValueError(f"TraceConfig.mode must be 'full' or 'tail', got '{self.mode}'.")
+        if self.keeping_t <= 0:
+            raise ValueError("TraceConfig.keeping_t must be positive.")
+
+
+@dataclass
+class TrailConfig:
+    """轨迹追踪配置。
+
+    mode="full":    显示从开始到当前的完整轨迹。
+    mode="keeping": 只保留最近 keeping_t 秒（physics_t）的轨迹。
+    """
+    mode: str = "full"
+    keeping_t: float | None = None
+    color: str | None = None
+    stroke_width: float = 2.0
+    opacity: float = 0.6
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("full", "keeping"):
+            raise ValueError(
+                f"TrailConfig.mode must be 'full' or 'keeping', got '{self.mode}'."
+            )
+        if self.mode == "keeping" and self.keeping_t is None:
+            raise ValueError(
+                "TrailConfig.mode='keeping' requires keeping_t to be set."
+            )
+        if self.keeping_t is not None and self.keeping_t <= 0:
+            raise ValueError(
+                f"TrailConfig.keeping_t must be positive, got {self.keeping_t}."
+            )
+
+
+@dataclass
 class PhysicObject2D:
     """Physical body with parameters, state schema, and render metadata."""
 
@@ -26,6 +75,9 @@ class PhysicObject2D:
 
     # Visual bindings: state variables → visual attributes (color, opacity, etc.)
     visual_bindings: list["VisualBinding"] = field(default_factory=list)
+
+    # 轨迹追踪配置：None 表示不追踪
+    trace_config: "TraceConfig | None" = None
 
     def __post_init__(self) -> None:
         require_identifier(self.object_id, kind="object_id")
@@ -68,6 +120,41 @@ class PhysicObject2D:
 
     def parameter_values(self) -> dict[str, float]:
         return {name: parameter.require_value() for name, parameter in self.parameters.items()}
+
+    def enable_trace(
+        self,
+        mode: str = "full",
+        *,
+        keeping_t: float = 2.0,
+        color: str = "white",
+        stroke_width: float = 2.0,
+        opacity: float = 0.6,
+    ) -> "PhysicObject2D":
+        """开启轨迹追踪。
+
+        调用后，物体运动时会在其所有笛卡尔坐标点处画出轨迹线。
+
+        Parameters
+        ----------
+        mode : "full" | "tail"
+            "full" 显示完整轨迹；"tail" 只保留最近 keeping_t 秒（物理时间）的轨迹。
+        keeping_t : float
+            tail 模式下保留的物理时间长度（秒），使用 physics_t 计算。
+        color : str
+            轨迹颜色。
+        stroke_width : float
+            轨迹线宽。
+        opacity : float
+            轨迹透明度。
+        """
+        self.trace_config = TraceConfig(
+            mode=mode,
+            keeping_t=keeping_t,
+            color=color,
+            stroke_width=stroke_width,
+            opacity=opacity,
+        )
+        return self
 
     def initial_state(self, **values: float | int | str) -> dict[str, float]:
         missing = set(self.state_variables) - set(values)

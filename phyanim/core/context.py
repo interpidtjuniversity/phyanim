@@ -200,56 +200,87 @@ class PhysicsContext(Context):
 
 
     def eval_position(self, obj_id: str, t: float) -> list[Tuple[float, float]]:
-        """评估 obj_id 在时间 t 处的位置，返回具体数值 x, y。"""
+        """评估 obj_id 在时间 t 处的位置，返回具体数值 x, y。
+
+        每个坐标分量可以是：
+        - 纯变量名（状态变量 / derived 变量 / 其它对象的状态变量）
+        - 字面量数字字符串（如 "0.5"）
+        - SymPy 表达式（如 "x_p + L/2"），可引用状态变量、derived 变量、参数、t
+        """
 
         tra_idx = self.find_trajectory_index(t)
         seg_id = self.tra_map[tra_idx]
 
         obj = self.objects[obj_id]
 
-        obj_seg_state_funcs = self.state_funcs[seg_id][obj_id]
-        derived_funcs = self.derived_funcs[seg_id]
-
-        all_states_deriveds = {}
-        all_states_deriveds.update(obj_seg_state_funcs)
-        all_states_deriveds.update(derived_funcs)
-
         cartesian_positions = []
-
-        other_obj_state_funcs = {}
-        for other_obj_id in self.objects:
-            if other_obj_id != obj_id:
-                funcs = self.state_funcs[seg_id][other_obj_id]
-                other_obj_state_funcs.update(funcs)
 
         cartesian_position_variables = obj.cartesian_position_variables()
         for cartesian_position_variable in cartesian_position_variables:
-            x_name, y_name = cartesian_position_variable
-            if x_name not in all_states_deriveds:
-                if x_name in other_obj_state_funcs:
-                    x_func = other_obj_state_funcs[x_name]
-                else:
-                    raise ValueError(
-                        f"Object {obj_id} position x variables "
-                        f"{x_name} not found in other objects."
-                    )
-            else:
-                x_func = all_states_deriveds[x_name]
-
-            if y_name not in all_states_deriveds:
-                if y_name in other_obj_state_funcs:
-                    y_func = other_obj_state_funcs[y_name]
-                else:
-                    raise ValueError(
-                        f"Object {obj_id} position y variables "
-                        f"{y_name} not found in other objects."
-                    )
-            else: 
-                y_func = all_states_deriveds[y_name]
-
-            cartesian_positions.append((float(x_func(t)), float(y_func(t))))
+            x_expr, y_expr = cartesian_position_variable
+            x_val = self._resolve_coordinate(x_expr, obj_id, seg_id, t)
+            y_val = self._resolve_coordinate(y_expr, obj_id, seg_id, t)
+            cartesian_positions.append((float(x_val), float(y_val)))
 
         return cartesian_positions
+
+    def _resolve_coordinate(
+        self, expr: str, obj_id: str, seg_id: str, t: float
+    ) -> float:
+        """解析一个笛卡尔坐标分量。
+
+        支持纯变量名、字面量数字、以及 SymPy 表达式。
+        表达式可引用所有对象的状态变量、derived 变量、参数、t。
+        """
+        from phyanim.utils.util import is_numeric
+
+        # 1. 字面量数字
+        if is_numeric(expr):
+            return float(expr)
+
+        # 2. 尝试直接用 value_at_time（覆盖自身状态、derived、t）
+        try:
+            return self.value_at_time(expr, t)
+        except (ValueError, KeyError):
+            pass
+        
+        # 4. 作为 SymPy 表达式求值（如 "x_p + L/2"）
+        #    eval_expr 的符号表包含本段所有状态变量 + derived + 参数 + t，
+        #    但不包含其它对象的状态变量。我们需要扩展符号表。
+        return self._eval_expr_full(expr, seg_id, t)
+
+    def _eval_expr_full(self, expr: str, seg_id: str, t: float) -> float:
+        """求值表达式，符号表包含所有对象的状态变量 + derived + 参数 + t。"""
+        import sympy as sp
+
+        # 构建完整的符号表
+        symbol_names = set(self.cached_seg_symbols_map[seg_id].keys())
+
+        # 添加其它对象的状态变量
+        for obj_id in self.state_funcs[seg_id]:
+            symbol_names.update(self.state_funcs[seg_id][obj_id].keys())
+
+        # 添加段参数
+        segment_parameters = self.segment_parameters.get(seg_id, {})
+        symbol_names.update(segment_parameters.keys())
+
+        locals_map = {name: sp.Symbol(name) for name in symbol_names}
+        parsed = sp.sympify(expr, locals=locals_map)
+        names = tuple(sorted(str(symbol) for symbol in parsed.free_symbols))
+
+        # 逐个求值
+        values = []
+        for name in names:
+            if name == "t":
+                values.append(t)
+            elif name in segment_parameters:
+                values.append(float(segment_parameters[name]))
+            else:
+                values.append(self.value_at_time(name, t))
+
+        symbols = [sp.Symbol(name) for name in names]
+        func = sp.lambdify(symbols, parsed, modules="numpy")
+        return float(func(*values))
 
     def get_entities(self, tracker: ValueTracker) -> list[Mobject]:
         #================================物理实体开始================================    
@@ -290,10 +321,41 @@ class PhysicsContext(Context):
                             f"Object '{obj_id}' has 1 cartesian position, "
                             f"but its mobject provides {len(callbacks)} callbacks."
                         )
+
+            # 创建轨迹 mobject（如果开启了轨迹追踪）
+            trace_mobs = self._create_trace_mobs(obj)
+
             # 给物理实体添加updater
-            mob.add_updater(self.make_obj_position_updater(obj_id, callbacks, tracker))
+            mob.add_updater(self.make_obj_position_updater(obj_id, callbacks, tracker, trace_mobs))
+
+            # 轨迹 mobject 需要在物理实体之后添加，确保渲染层级
+            mobs.extend(trace_mobs)
 
         return mobs
+
+    def _create_trace_mobs(self, obj: PhysicObject2D) -> list[Mobject]:
+        """为开启了轨迹追踪的对象创建轨迹 VMobject。
+
+        每个笛卡尔坐标点对应一条独立的轨迹线。
+        """
+        from manim import VMobject
+        from phyanim.core.objects import TraceConfig
+
+        if obj.trace_config is None:
+            return []
+
+        config = obj.trace_config
+        n_points = len(obj.cartesian_position_variables())
+        trace_mobs = []
+        for _ in range(n_points):
+            line = VMobject()
+            line.set_stroke(color=config.color, width=config.stroke_width)
+            line.set_opacity(config.opacity)
+            # 初始为一个不可见的退化线段（单点）
+            line.start_new_path(np.array([0.0, 0.0, 0.0]))
+            line.add_line_to(np.array([0.0, 0.0, 0.0]))
+            trace_mobs.append(line)
+        return trace_mobs
 
     # 普通物理对象
     def make_obj_position_updater(
@@ -301,6 +363,7 @@ class PhysicsContext(Context):
         current_obj_id: str,
         current_callbacks=None,
         tracker: ValueTracker = None,
+        trace_mobs: list[Mobject] | None = None,
     ):
         obj = self.objects[current_obj_id]
         # 预编译 visual_bindings 的表达式
@@ -311,6 +374,11 @@ class PhysicsContext(Context):
                 compiler = SympyExpressionCompiler()
                 binding_compiled[id(binding)] = compiler.compile(binding.expression, symbol_names=symbol_names)
 
+        # 轨迹追踪状态：每个笛卡尔坐标点维护一个 (physics_t, x, y) 列表
+        trace_points: list[list[tuple[float, float, float]]] | None = None
+        if trace_mobs:
+            trace_points = [[] for _ in trace_mobs]
+
         def updater(m):
             t = tracker.get_value()
             physics_t = self.render_to_physics_mapping_func(t)
@@ -320,9 +388,7 @@ class PhysicsContext(Context):
                 for callback, position in zip(current_callbacks, cartesian_positions):
                     x, y = position
                     callback(x, y)
-                return
-
-            if len(cartesian_positions) == 1:
+            elif len(cartesian_positions) == 1:
                 x, y = cartesian_positions[0]
                 m.move_to(np.array([x, y, 0.0]))
 
@@ -354,7 +420,62 @@ class PhysicsContext(Context):
             for callback, position in zip(current_callbacks or [], cartesian_positions):
                 x, y = position
                 callback(x, y)
+
+            # 轨迹追踪更新
+            if trace_mobs and trace_points is not None:
+                self._update_trace(
+                    obj, trace_mobs, trace_points, cartesian_positions, physics_t
+                )
         return updater
+
+    def _update_trace(
+        self,
+        obj: PhysicObject2D,
+        trace_mobs: list[Mobject],
+        trace_points: list[list[tuple[float, float, float]]],
+        cartesian_positions: list[tuple[float, float]],
+        physics_t: float,
+    ) -> None:
+        """每帧更新轨迹线。
+
+        追加当前物理时刻的位置采样点，tail 模式下裁剪超出 keeping_t 窗口的旧点。
+        """
+        from manim import VMobject
+
+        config = obj.trace_config
+        if config is None:
+            return
+
+        for i, (x, y) in enumerate(cartesian_positions):
+            pts = trace_points[i]
+            pts.append((physics_t, float(x), float(y)))
+
+            # tail 模式：裁剪掉 keeping_t 之前的点
+            if config.mode == "tail":
+                cutoff = physics_t - config.keeping_t
+                # 保留第一个 >= cutoff 的点之前的一个点，保证线段连续
+                while len(pts) > 2 and pts[1][0] < cutoff:
+                    pts.pop(0)
+                # 如果第一个点也太旧，用 cutoff 处的插值替换
+                if len(pts) > 1 and pts[0][0] < cutoff:
+                    t0, x0, y0 = pts[0]
+                    t1, x1, y1 = pts[1]
+                    if t1 > t0:
+                        alpha = (cutoff - t0) / (t1 - t0)
+                        pts[0] = (cutoff, x0 + alpha * (x1 - x0), y0 + alpha * (y1 - y0))
+
+            # 构建 manim 点序列
+            if len(pts) < 2:
+                continue
+
+            mob = trace_mobs[i]
+            points = [np.array([px, py, 0.0]) for _, px, py in pts]
+            # VMobject 的 set_points_as_corners 会自动闭合路径（末点→首点），
+            # 闭合后 fill 会渲染出一个面。通过 set_fill(opacity=0) 关闭填充，
+            # 这样即使路径闭合也只显示描边（轨迹线），不显示填充面。
+            mob.set_points_as_corners(points)
+            mob.set_fill(opacity=0)
+            mob.set_stroke(color=config.color, width=config.stroke_width, opacity=config.opacity)
 
 
 # 注释上下文，需要使用AnimationContext和annotationsolver来进行初始化

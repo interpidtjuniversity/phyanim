@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from phyanim.llm import LLMConfig, make_client, PhysicsLLMPlanner, DSLParser, generate_and_render
+from phyanim.llm import LLMConfig, make_client, PhysicsLLMPlanner, render_code
 
 config = LLMConfig(
     api_key="sk-77e1188b130f4187b2c66ec583a75616",
@@ -12,6 +12,6 @@ config = LLMConfig(
 )
 planner = PhysicsLLMPlanner(make_client(config))
 
-dsl = planner.plan("两个小球通过弹簧碰撞，参数你自行设定")
-code = DSLParser().parse(dsl)      # → 可执行 .py 字符串
-video = generate_and_render(dsl)   # 可选：直接出视频
+code = planner.plan("一个小球从10米高处自由落体，另一个小球从地面向上以10m/s速度竖直上抛")
+print(code)                              # → 可执行 .py 字符串
+# render_code(code, output_dir="outputs")  # 可选：直接出视频

@@ -1,7 +1,10 @@
 """LLM planning layer for natural-language physics problems.
 
-Pipeline: problem text (+ optional images) → multimodal LLM → JSON DSL →
-executable Python code → optional manim render.
+Pipeline: problem text (+ optional images) → multimodal LLM → executable
+Python code → optional manim render.
+
+The LLM outputs raw Python code directly (no JSON DSL).  The planner
+extracts and validates the code, then the runner can execute it.
 """
 
 from phyanim.llm.client import (
@@ -12,23 +15,19 @@ from phyanim.llm.client import (
     OpenAICompatibleClient,
     make_client,
 )
-from phyanim.llm.parser import DSLParser
-from phyanim.llm.planner import PhysicsLLMPlanner
-from phyanim.llm.runner import generate_and_render, render_code
-from phyanim.llm.validation import IRValidationError, validate_dsl, validate_physics_ir
+from phyanim.llm.planner import PhysicsLLMPlanner, CodeValidationError
+from phyanim.llm.prompt_builder import build_system_prompt
+from phyanim.llm.runner import render_code
 
 __all__ = [
-    "DSLParser",
+    "CodeValidationError",
     "DeepSeekClient",
     "DoubaoClient",
-    "IRValidationError",
     "LLMClient",
     "LLMConfig",
     "OpenAICompatibleClient",
     "PhysicsLLMPlanner",
-    "generate_and_render",
+    "build_system_prompt",
     "make_client",
     "render_code",
-    "validate_dsl",
-    "validate_physics_ir",
 ]

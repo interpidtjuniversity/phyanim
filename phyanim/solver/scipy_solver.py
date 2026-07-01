@@ -19,7 +19,7 @@ class ScipySegmentSolver(Solver):
     method: str = "DOP853"
     rtol: float = 1e-10
     atol: float = 1e-12
-    max_step: float | None = None
+    max_step: float | None = 0.001
     sample_dt: float | None = None
     clamp_functions: bool = False
     event_time_tolerance: float = 1e-9
@@ -58,6 +58,7 @@ class ScipySegmentSolver(Solver):
             return {name: float(y[index]) for name, index in name_to_index.items()}
 
         derivative = segment.build_derivative(parameters)
+        derived_functions = segment.build_derived_quantities(parameters)
 
         # 根据某一时刻状态值获取状态的导数值
         def rhs(time: float, y: Any) -> Any:
@@ -65,12 +66,16 @@ class ScipySegmentSolver(Solver):
             derivative_values = derivative(float(time), state, dict(parameters))
             return np.array([derivative_values[name] for name in segment.state_vector], dtype=float)
 
-        symbol_names = set(segment.state_vector) | set(parameters) | {"t"}
+        # 事件表达式可以引用状态变量、derived 变量、参数、t
+        symbol_names = set(segment.state_vector) | set(parameters) | set(segment.derived_equations) | {"t"}
         event_function = end_event.condition.build_function(symbol_names=symbol_names)
-        
+
         def make_event(current_event, current_function):
             def scipy_event(time: float, y: Any) -> float:
                 state = array_to_state(y)
+                # 实时计算 derived 变量，合并到 state 中供事件表达式使用
+                for dname, dfunc in derived_functions.items():
+                    state[dname] = float(dfunc(float(time), dict(state), dict(parameters)))
                 return float(current_function(float(time), state, dict(parameters)))
 
             # 事件方向直接交给 solve_ivp：-1 表示正到负，1 表示负到正，0 表示任意方向。

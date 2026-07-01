@@ -12,7 +12,6 @@ from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
 from phyanim.core.validation import SymbolRegistry, normalize_numeric_mapping, require_identifiers
 from phyanim.solver.solver import Solver
 from phyanim.solver.scipy_solver import ScipySegmentSolver
-from phyanim.solver.heyoka_solver import HeyokaSegmentSolver
 from phyanim.solver.kinematic_solver import KinematicSegmentSolver
 from phyanim.core.layer import Layer
 
@@ -146,6 +145,12 @@ class PhysicsAnimation:
         if self.engine == "scipy":
             return ScipySegmentSolver(sample_dt=self.sample_dt)
         if self.engine == "heyoka":
+            try:
+                from phyanim.solver.heyoka_solver import HeyokaSegmentSolver
+            except ImportError as exc:
+                raise ImportError(
+                    "heyoka engine requires heyoka.py. Install it with: pip install heyoka"
+                ) from exc
             return HeyokaSegmentSolver(sample_dt=self.sample_dt)
         if self.engine == "kinematic":
             return KinematicSegmentSolver(sample_dt=self.sample_dt)

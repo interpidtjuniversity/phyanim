@@ -1,7 +1,14 @@
 """Solver backends for physics segments."""
 
 from phyanim.solver.scipy_solver import ScipySegmentSolver
-from phyanim.solver.heyoka_solver import HeyokaSegmentSolver
 from phyanim.solver.kinematic_solver import KinematicSegmentSolver
+
+# heyoka is an optional dependency — import lazily so the package works
+# without it installed.  The solver code is preserved; it just can't be
+# used unless heyoka.py is available.
+try:
+    from phyanim.solver.heyoka_solver import HeyokaSegmentSolver
+except ImportError:
+    HeyokaSegmentSolver = None  # type: ignore[assignment,misc]
 
 __all__ = ["ScipySegmentSolver", "HeyokaSegmentSolver", "KinematicSegmentSolver"]

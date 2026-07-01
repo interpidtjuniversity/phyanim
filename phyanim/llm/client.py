@@ -41,7 +41,21 @@ class LLMConfig:
 
 @runtime_checkable
 class LLMClient(Protocol):
-    """Every backend implements this single method."""
+    """Every backend implements these methods."""
+
+    def complete_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        images: list[str] | None = None,
+    ) -> str:
+        """Call the model and return raw text (Python code, etc.).
+
+        ``images`` is an optional list of file paths or ``data:`` URLs. Backends
+        that do not support vision ignore it; backends that do embed each image
+        as a base64 data URL in the user message content.
+        """
+        ...
 
     def complete_json(
         self,
@@ -67,6 +81,24 @@ class DeepSeekClient:
 
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
+
+    def complete_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        images: list[str] | None = None,
+    ) -> str:
+        payload = {
+            "model": self.config.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.2,
+            "reasoning_effort": "max",
+        }
+        response = self._post("/chat/completions", payload)
+        return response["choices"][0]["message"]["content"]
 
     def complete_json(
         self,
@@ -124,6 +156,30 @@ class OpenAICompatibleClient:
 
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
+
+    def complete_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        images: list[str] | None = None,
+    ) -> str:
+        user_content: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
+        for image in images or []:
+            data_url = _resolve_image_to_data_url(image)
+            user_content.append(
+                {"type": "image_url", "image_url": {"url": data_url}}
+            )
+
+        payload = {
+            "model": self.config.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": 0.2,
+        }
+        response = self._post("/chat/completions", payload)
+        return response["choices"][0]["message"]["content"]
 
     def complete_json(
         self,

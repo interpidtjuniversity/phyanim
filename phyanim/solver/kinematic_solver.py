@@ -272,11 +272,15 @@ class KinematicSegmentSolver(Solver):
             return planned_t1, end_event.name
 
         # Build event function from the expression.
+        # Event expressions can reference state variables, derived variables, parameters, and t.
         compiler = SympyExpressionCompiler()
-        symbol_names = set(segment.state_vector) | set(parameters) | {"t"}
+        symbol_names = set(segment.state_vector) | set(parameters) | set(segment.derived_equations) | {"t"}
         compiled_expr = compiler.compile(
             condition.expression, symbol_names=symbol_names
         )
+
+        # Pre-compute derived quantities at each sample time.
+        derived_history = self._eval_derived(segment, parameters, times, state_history)
 
         # Evaluate event function at each sample time.
         event_values = []
@@ -284,6 +288,9 @@ class KinematicSegmentSolver(Solver):
             state_at_t = {
                 s: state_history[s][idx] for s in segment.state_vector
             }
+            # Merge derived values into state for event expression resolution.
+            for dname, dvals in derived_history.items():
+                state_at_t[dname] = dvals[idx]
             val = compiled_expr.evaluate(state_at_t, parameters, float(t))
             event_values.append(float(val))
 

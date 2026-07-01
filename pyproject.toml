@@ -8,8 +8,9 @@ dependencies = [
     "scipy",
     "sympy",
     "manim",
-    "heyoka",
-    "matplotlib"
+    "matplotlib",
+    "flask",
+    "manim-voiceover"
 ]
 
 [tool.setuptools.packages.find]
