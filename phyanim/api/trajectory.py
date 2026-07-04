@@ -13,6 +13,7 @@ import numpy as np
 
 from phyanim.core.animation import PhysicsAnimation
 from phyanim.core.context import PhysicsContext
+from phyanim.utils.util import is_numeric
 
 
 @dataclass
@@ -132,7 +133,13 @@ class TrajectoryData:
         parameter, ``t`` (absolute time), ``t_start``/``t_end`` (segment
         bounds).
         """
+        if is_numeric(expr):
+            return float(expr)
         return self._ctx.eval_expr(expr, "float", t)
+
+    def eval_expr_vector(self, exprs: list[str] | tuple[str, ...], t: float) -> np.ndarray:
+        """Evaluate a vector SymPy expression at physics time *t*."""
+        return np.array([self.eval_expr(expr, t) for expr in exprs])
 
     def eval_expr_bool(self, expr: str, t: float) -> bool:
         """Evaluate a boolean SymPy expression at physics time *t*."""
@@ -166,6 +173,44 @@ class TrajectoryData:
     def segment_index(self, t: float) -> int:
         """Return the trajectory index that owns physics time *t*."""
         return self._ctx.find_trajectory_index(t)
+
+    # ------------------------------------------------------------------
+    # Registered event queries
+    # ------------------------------------------------------------------
+
+    def all_events(self) -> dict[str, list[float]]:
+        """Return all registered events and their trigger times.
+
+        Returns
+        -------
+        dict[str, list[float]]
+            Maps ``event_id`` to a list of physics-time seconds at which
+            the event's expression crossed zero.
+
+        Example::
+
+            trajectory = solve_animation(animation)
+            for event_id, times in trajectory.all_events().items():
+                print(f"{event_id}: triggered at {times}")
+        """
+        return dict(self._ctx.event_trigger_map)
+
+    def event_trigger_times(self, event_id: str) -> list[float]:
+        """Return the trigger times for a specific registered event.
+
+        Parameters
+        ----------
+        event_id:
+            The event ID passed to ``animation.register_event()``.
+
+        Returns
+        -------
+        list[float]
+            Sorted list of physics-time seconds at which the event
+            was triggered.  Empty if the event never triggered or
+            was not registered.
+        """
+        return list(self._ctx.event_trigger_map.get(event_id, []))
 
     # ------------------------------------------------------------------
     # Sampling

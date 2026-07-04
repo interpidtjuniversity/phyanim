@@ -55,6 +55,48 @@ class PhyAnimationMultiLayerScene2D(_VoiceoverBase):
         self.animations: list[tuple[str, str, PhysicsAnimation]] = []
         self._tts_config: dict | TTSConfig | None = None
         self._narration: list[dict] | None = None
+        # Auto-configure xelatex + CJK font for MathTex.
+        self._setup_tex_template()
+
+    def _setup_tex_template(self) -> None:
+        """Set up xelatex template with CJK font support.
+
+        Called automatically in __init__ — LLM code does NOT need
+        to call MathTex.set_default() or configure any template.
+        """
+        from manim import MathTex, TexTemplate
+        import subprocess
+
+        cjk_fonts = [
+            "WenQuanYi Micro Hei",
+            "Noto Sans CJK SC",
+            "SimSun",
+            "SimHei",
+            "Microsoft YaHei",
+            "AR PL UMing CN",
+        ]
+
+        chosen_font = None
+        try:
+            result = subprocess.run(
+                ["fc-list", ":family"],
+                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=5,
+            )
+            available = set(result.stdout.strip().split("\n"))
+            for font in cjk_fonts:
+                if font in available:
+                    chosen_font = font
+                    break
+        except Exception:
+            pass
+
+        tpl = TexTemplate()
+        tpl.tex_compiler = "xelatex"
+        tpl.output_format = ".xdv"
+        if chosen_font:
+            tpl.add_to_preamble("\\usepackage{fontspec}")
+            tpl.add_to_preamble(f"\\setmainfont{{{chosen_font}}}")
+        MathTex.set_default(tex_template=tpl)
 
     def set_animation(self, animation: PhysicsAnimation) -> None:
         """Register a single animation (backward compatible)."""

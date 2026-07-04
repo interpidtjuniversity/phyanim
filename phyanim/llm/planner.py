@@ -30,9 +30,10 @@ class PhysicsLLMPlanner:
     as Python, and does one self-repair round-trip if it doesn't.
     """
 
-    def __init__(self, client: LLMClient, tts_config: dict | None = None) -> None:
+    def __init__(self, client: LLMClient, tts_config: dict | None = None, media_dir: str | None = None) -> None:
         self.client = client
         self.tts_config = tts_config or {}
+        self.media_dir = media_dir
 
     def plan(
         self,
@@ -93,6 +94,9 @@ class PhysicsLLMPlanner:
             _validate_python(code)
         # Inject TTS_CONFIG into the generated code.
         code = _inject_tts_config(code, self.tts_config)
+        # Inject media_dir setting so all manim output stays in the specified directory.
+        if self.media_dir:
+            code = _inject_media_dir(code, self.media_dir)
         # Rename Scene class if requested (affects manim output filename).
         if scene_name:
             code = _rename_scene_class(code, scene_name)
@@ -210,6 +214,32 @@ def _inject_tts_config(code: str, tts_config: dict) -> str:
 
     # Fallback: prepend.
     return config_line + code
+
+
+def _inject_media_dir(code: str, media_dir: str) -> str:
+    """Inject manim media_dir setting into generated code.
+
+    Sets ``config.media_dir`` so ALL manim artifacts (videos, tex, text,
+    images, audio, partial movies) go into the specified directory.
+    Inserted after the sys.path.insert line, before any Scene class.
+    """
+    # Normalize to absolute path string.
+    from pathlib import Path
+    abs_media = str(Path(media_dir).resolve())
+    media_line = f'from manim import config as _manim_config; _manim_config.media_dir = "{abs_media}"'
+
+    lines = code.split("\n")
+    insert_idx = None
+    for i, line in enumerate(lines):
+        if "sys.path.insert" in line:
+            insert_idx = i + 1
+
+    if insert_idx is not None:
+        lines.insert(insert_idx, "")
+        lines.insert(insert_idx + 1, media_line)
+        return "\n".join(lines)
+
+    return media_line + "\n" + code
 
 
 def _rename_scene_class(code: str, new_name: str) -> str:

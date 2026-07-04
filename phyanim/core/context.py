@@ -44,6 +44,8 @@ class PhysicsContext(Context):
         self.segments = segments
         self.segment_parameters = segment_parameters
         self.objects = objects
+        # 注册事件的触发时刻（由 animation._solve_registered_events 填充）
+        self.event_trigger_map: dict[str, list[float]] = {}
 
         # 这里times中可能有重复时刻
         self.times_set : set[float] = set()

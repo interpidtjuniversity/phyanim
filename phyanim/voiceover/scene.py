@@ -53,6 +53,69 @@ class PhyAnimScene(_BaseVoiceoverScene):
         self.camera.background_color = self.BG_COLOR
         self._tts_config: TTSConfig = TTSConfig(provider="none")
         self._speech_ready: bool = False
+        # Auto-configure xelatex + CJK font for MathTex so the LLM doesn't need to.
+        self._setup_tex_template()
+
+    def _setup_tex_template(self) -> None:
+        """Set up xelatex template with CJK font support.
+
+        Tries multiple CJK fonts and uses the first available one.
+        This is called automatically in __init__ — LLM code does NOT need
+        to call MathTex.set_default() or configure any template.
+        """
+        from manim import MathTex, TexTemplate
+        import subprocess
+
+        # Candidate CJK fonts (in priority order).
+        cjk_fonts = [
+            "WenQuanYi Micro Hei",
+            "Noto Sans CJK SC",
+            "Noto Sans SC",
+            "SimSun",
+            "SimHei",
+            "Microsoft YaHei",
+            "AR PL UMing CN",
+        ]
+
+        # Find the first available font.
+        chosen_font = None
+        try:
+            result = subprocess.run(
+                ["fc-list"],
+                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=5,
+            )
+            # fc-list output: "path: Family1,Family2:style=..."
+            # On Windows paths like C:/..., use ": " (colon-space) to split path from families.
+            available_families = set()
+            for line in result.stdout.strip().split("\n"):
+                # Split on first ": " to separate path from family list
+                idx = line.find(": ")
+                if idx < 0:
+                    continue
+                family_part = line[idx + 2:]
+                # family_part is "Family1,Family2:style=..."
+                # Remove :style=... suffix
+                style_idx = family_part.find(":style=")
+                if style_idx >= 0:
+                    family_part = family_part[:style_idx]
+                for name in family_part.split(","):
+                    name = name.strip()
+                    if name:
+                        available_families.add(name)
+            for font in cjk_fonts:
+                if font in available_families:
+                    chosen_font = font
+                    break
+        except Exception:
+            pass
+
+        tpl = TexTemplate()
+        tpl.tex_compiler = "xelatex"
+        tpl.output_format = ".xdv"
+        if chosen_font:
+            tpl.add_to_preamble("\\usepackage{fontspec}")
+            tpl.add_to_preamble(f"\\setmainfont{{{chosen_font}}}")
+        MathTex.set_default(tex_template=tpl)
 
     # ------------------------------------------------------------------
     # TTS setup

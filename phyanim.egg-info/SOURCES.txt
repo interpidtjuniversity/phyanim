@@ -49,7 +49,6 @@ phyanim/server/config.py
 phyanim/solver/__init__.py
 phyanim/solver/annotation_solver.py
 phyanim/solver/heyoka_solver.py
-phyanim/solver/kinematic_solver.py
 phyanim/solver/scipy_solver.py
 phyanim/solver/solver.py
 phyanim/solver/timewrapper_solver.py

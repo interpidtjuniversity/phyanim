@@ -2,6 +2,8 @@
 
 Accepts a user prompt (and optional image URLs), calls the LLM to generate
 Python animation code, renders it to a video, and returns the video file.
+ALL generated files (scripts, videos, tex, audio, images) are confined
+to the configured ``media_dir``.
 
 Usage::
 
@@ -12,6 +14,7 @@ Usage::
         llm_provider=LLMProvider.DEEPSEEK,
         llm_api_key="sk-...",
         tts=TTSConfig(provider="minimax", api_key="...", voice_id="male-qn-qingse"),
+        media_dir="/home/phyanim/media",
     )
     app = create_app(config)
     app.run(host="0.0.0.0", port=5000)
@@ -46,7 +49,7 @@ def create_app(config: ServerConfig) -> Flask:
     Parameters
     ----------
     config:
-        Server configuration (LLM provider, TTS, output dir, etc.).
+        Server configuration (LLM provider, TTS, media_dir, etc.).
     """
     app = Flask(__name__)
     app.config["SERVER_CONFIG"] = config
@@ -64,7 +67,7 @@ def create_app(config: ServerConfig) -> Flask:
             - On error: JSON with error details.
         """
         data = request.get_json(silent=True) or {}
-        prompt = data.get("prompt", "").strip()
+        prompt = (data.get("user_prompt") or data.get("prompt") or "").strip()
         image_urls = data.get("image_urls") or []
 
         if not prompt:
@@ -73,37 +76,44 @@ def create_app(config: ServerConfig) -> Flask:
         cfg: ServerConfig = app.config["SERVER_CONFIG"]
 
         # Generate a unique timestamp for this request.
-        # All files (script, video, audio) will carry this timestamp.
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         scene_name = f"Scene_{timestamp}"
         script_name = f"generated_{timestamp}.py"
 
         try:
-            # 1. Create LLM client and planner with TTS config injected.
-            client = cfg.make_llm_client()
-            planner = PhysicsLLMPlanner(client, tts_config=cfg.to_tts_dict())
+            # 1. Resolve media directory.
+            media_dir = cfg.resolved_media_dir()
+            manim_media = cfg.resolved_manim_media_dir()
+            code_dir = cfg.resolved_code_dir()
 
-            # 2. Generate Python code from the prompt.
+            # 2. Create LLM client and planner.
+            #    Inject TTS config and media_dir into generated code.
+            client = cfg.make_llm_client()
+            planner = PhysicsLLMPlanner(
+                client,
+                tts_config=cfg.to_tts_dict(),
+                media_dir=str(manim_media),
+            )
+
+            # 3. Generate Python code from the prompt.
             logger.info("[%s] Generating code for prompt: %s", timestamp, prompt[:100])
             code = planner.plan(prompt, images=image_urls or None, scene_name=scene_name)
             logger.info("[%s] Code generated (%d chars)", timestamp, len(code))
 
-            # 3. Render the code to a video.
-            #    Scripts go to code_output_dir, manim media/ goes to video_output_dir.
+            # 4. Render the code to a video.
+            #    All manim output goes to <media_dir>/media/.
             logger.info("[%s] Rendering video...", timestamp)
-            code_dir = cfg.resolved_code_output_dir()
-            video_dir = cfg.resolved_video_output_dir()
             script_path = render_code(
                 code,
-                output_dir=str(code_dir),
+                media_dir=str(media_dir),
                 script_name=script_name,
-                media_dir=str(video_dir),
+                output_dir=str(code_dir),
             )
 
-            # 4. Find the rendered video file.
-            #    manim writes to <video_dir>/media/videos/.../<SceneName>.mp4
-            media_dir = video_dir / "media" / "videos"
-            video_files = list(media_dir.rglob("*.mp4"))
+            # 5. Find the rendered video file.
+            #    manim writes to <media_dir>/media/videos/.../<SceneName>.mp4
+            video_search_dir = manim_media / "videos"
+            video_files = list(video_search_dir.rglob("*.mp4"))
             # Exclude partial movie files.
             video_files = [f for f in video_files if "partial_movie" not in str(f)]
 
@@ -138,6 +148,7 @@ def create_app(config: ServerConfig) -> Flask:
             "llm_provider": cfg.llm_provider.value,
             "llm_model": cfg.resolved_model(),
             "tts_enabled": cfg.tts.enabled,
+            "media_dir": str(cfg.resolved_media_dir()),
         })
 
     return app

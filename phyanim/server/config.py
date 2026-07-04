@@ -12,6 +12,7 @@ Usage::
         llm_provider=LLMProvider.DEEPSEEK,
         llm_api_key="sk-...",
         tts=TTSConfig(provider="minimax", voice_id="male-qn-qingse"),
+        media_dir="/home/phyanim/media",
     )
 """
 
@@ -64,13 +65,10 @@ class ServerConfig:
         Base URL for the LLM API.  If empty, uses the provider's default.
     tts:
         TTS configuration.  If None, TTS is disabled.
-    code_output_dir:
-        Directory where generated .py scripts are written.
-        Defaults to project_root/outputs/code.
-    video_output_dir:
-        Directory where manim writes media/ (videos, audio, tex cache).
-        This is set as the cwd when running the generated script.
-        Defaults to project_root/outputs/video.
+    media_dir:
+        Root directory for ALL generated files — scripts, manim media
+        (videos, tex, text, images, audio, partial movies), TTS cache, etc.
+        Defaults to ``<cwd>/media``.
     """
 
     llm_provider: LLMProvider = LLMProvider.DEEPSEEK
@@ -78,9 +76,36 @@ class ServerConfig:
     llm_model: str = ""
     llm_base_url: str = ""
     tts: TTSConfig = field(default_factory=lambda: TTSConfig(provider="none"))
-    code_output_dir: str = ""
-    video_output_dir: str = ""
+    media_dir: str = ""
     timeout_seconds: int = 300
+
+    def resolved_media_dir(self) -> Path:
+        """Return the absolute media directory, creating it if needed.
+
+        All generated files go here:
+        - media_dir/code/         — generated .py scripts
+        - media_dir/media/        — manim output (videos, tex, text, images, audio)
+        """
+        d = Path(self.media_dir).resolve() if self.media_dir else Path.cwd() / "media"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def resolved_code_dir(self) -> Path:
+        """Directory for generated .py scripts (under media_dir/code/)."""
+        d = self.resolved_media_dir() / "code"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def resolved_manim_media_dir(self) -> Path:
+        """Directory for manim media output (under media_dir/media/).
+
+        This is set as manim's ``config.media_dir`` so that ALL manim
+        artifacts (videos, tex, text, images, partial movies, audio)
+        go here instead of polluting the project directory.
+        """
+        d = self.resolved_media_dir() / "media"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
 
     def resolved_api_key(self) -> str:
         """Return the effective LLM API key (field or env var)."""
@@ -93,20 +118,6 @@ class ServerConfig:
     def resolved_base_url(self) -> str:
         """Return the effective base URL."""
         return self.llm_base_url or _PROVIDER_BASE_URLS.get(self.llm_provider, "")
-
-    def resolved_code_output_dir(self) -> Path:
-        """Return the absolute code output directory, creating it if needed."""
-        from pathlib import Path
-        d = Path(self.code_output_dir).resolve() if self.code_output_dir else Path.cwd() / "outputs" / "code"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
-
-    def resolved_video_output_dir(self) -> Path:
-        """Return the absolute video output directory, creating it if needed."""
-        from pathlib import Path
-        d = Path(self.video_output_dir).resolve() if self.video_output_dir else Path.cwd() / "outputs" / "video"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
 
     def to_llm_config(self) -> LLMConfig:
         """Build an LLMConfig for the phyanim.llm client."""
@@ -145,11 +156,8 @@ class ServerConfig:
             PHYANIM_TTS_PROVIDER: "minimax" or "none"
             PHYANIM_TTS_API_KEY: MiniMax API key
             PHYANIM_TTS_VOICE: Voice ID
-            PHYANIM_CODE_OUTPUT_DIR: Directory for generated .py scripts
-            PHYANIM_VIDEO_OUTPUT_DIR: Directory for rendered videos (media/)
+            PHYANIM_MEDIA_DIR: Root directory for all generated files
         """
-        from pathlib import Path
-
         provider_str = os.environ.get("PHYANIM_LLM_PROVIDER", "deepseek").lower()
         provider = LLMProvider.DEEPSEEK if provider_str == "deepseek" else LLMProvider.DOUBAO
 
@@ -166,6 +174,5 @@ class ServerConfig:
             llm_model=os.environ.get("PHYANIM_LLM_MODEL", ""),
             llm_base_url=os.environ.get("PHYANIM_LLM_BASE_URL", ""),
             tts=tts,
-            code_output_dir=os.environ.get("PHYANIM_CODE_OUTPUT_DIR", ""),
-            video_output_dir=os.environ.get("PHYANIM_VIDEO_OUTPUT_DIR", ""),
+            media_dir=os.environ.get("PHYANIM_MEDIA_DIR", ""),
         )

@@ -12,7 +12,6 @@ from phyanim.core.trajectory import InterpolatedStateFunction, Trajectory
 from phyanim.core.validation import SymbolRegistry, normalize_numeric_mapping, require_identifiers
 from phyanim.solver.solver import Solver
 from phyanim.solver.scipy_solver import ScipySegmentSolver
-from phyanim.solver.kinematic_solver import KinematicSegmentSolver
 from phyanim.core.layer import Layer
 
 @dataclass
@@ -39,6 +38,8 @@ class PhysicsAnimation:
     # physics_layer，它是physics_ctx的展示层
     physics_layer: Layer | None = None
     render_layer: Layer | None = None
+    # 注册的观察事件（不影响求解，在求解后扫描轨迹检测触发时刻）
+    registered_events: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.global_parameters = normalize_numeric_mapping(
@@ -135,6 +136,68 @@ class PhysicsAnimation:
             end_event=end_event,
         )
 
+    def register_event(
+        self,
+        event_id: str,
+        expression: str,
+        direction: int = 0,
+        event_type: str = "crossing",
+    ) -> "PhysicsAnimation":
+        """注册一个观察事件，在求解后扫描轨迹检测其触发时刻。
+
+        观察事件不影响物理求解过程。
+
+        Parameters
+        ----------
+        event_id:
+            事件唯一标识符。
+        expression:
+            - event_type="crossing": 零点检测表达式（SymPy 语法）。可引用
+              所有状态变量、derived 变量、参数、t。当表达式穿越零点时触发。
+            - event_type="bool": 布尔表达式。当条件从 False 变为 True 时触发。
+              可用运算符：> < >= <= == != & | ~。可引用所有状态变量、
+              derived 变量、参数、t。支持内置极值函数：
+              is_local_max(expr)  — expr 在该采样点是局部极大值
+              is_local_min(expr)  — expr 在该采样点是局部极小值
+              is_global_max(expr) — expr 在该采样点是全局最大值
+              is_global_min(expr) — expr 在该采样点是全局最小值
+              极值函数的 expr 参数是一个 SymPy 表达式字符串。
+        direction:
+            -1 = 正→负穿越，1 = 负→正穿越，0 = 任意方向。
+            仅对 crossing 类型有效。
+        event_type:
+            "crossing"（零点穿越，默认）或 "bool"（布尔条件）。
+
+        Returns
+        -------
+        PhysicsAnimation
+            self（支持链式调用）。
+
+        示例::
+
+            # 零点穿越
+            animation.register_event("at_peak", "vy", direction=-1)
+
+            # 布尔条件
+            animation.register_event("fast_and_high", "(x > 5) & (vx > 100)", event_type="bool")
+
+            # 极值检测
+            animation.register_event("peak", "is_local_max(y)", event_type="bool")
+            animation.register_event("valley", "is_local_min(y)", event_type="bool")
+            animation.register_event("highest", "is_global_max(y)", event_type="bool")
+        """
+        if direction not in (-1, 0, 1):
+            raise ValueError("direction must be -1, 0, or 1")
+        if event_type not in ("crossing", "bool"):
+            raise ValueError("event_type must be 'crossing' or 'bool'")
+        self.registered_events.append({
+            "event_id": event_id,
+            "expression": expression,
+            "direction": direction,
+            "event_type": event_type,
+        })
+        return self
+
     def solve(self, solver: Solver | None = None) -> PhysicsContext:
         """求解动画"""
         solver = solver or self._build_solver()
@@ -152,9 +215,7 @@ class PhysicsAnimation:
                     "heyoka engine requires heyoka.py. Install it with: pip install heyoka"
                 ) from exc
             return HeyokaSegmentSolver(sample_dt=self.sample_dt)
-        if self.engine == "kinematic":
-            return KinematicSegmentSolver(sample_dt=self.sample_dt)
-        raise ValueError(f"Unknown engine: {self.engine}. Supported engines are 'scipy', 'heyoka', and 'kinematic'.")
+        raise ValueError(f"Unknown engine: {self.engine}. Supported engines are 'scipy' and 'heyoka'.")
 
     def get_physics_layer(self) -> Layer:     
         if self.physics_layer is not None:
@@ -198,7 +259,7 @@ class PhysicsAnimation:
 
         self.solved = True
 
-        return PhysicsContext(
+        ctx = PhysicsContext(
                 self.build_state_functions(),
                 self.build_derived_functions(),
                 self.trajectories,
@@ -206,6 +267,223 @@ class PhysicsAnimation:
                 self.segment_parameters,
                 self.objects
             )
+
+        # 求解注册的观察事件：扫描所有采样时间点，检测零点穿越。
+        ctx.event_trigger_map = self._solve_registered_events(ctx)
+
+        return ctx
+
+    def _solve_registered_events(self, ctx: PhysicsContext) -> dict[str, list[float]]:
+        """求解所有注册事件的触发时刻。
+
+        支持两种事件类型：
+        - crossing: 零点穿越检测，用 brentq 精确定位。
+        - bool: 布尔条件检测，当条件从 False 变为 True 时触发。
+          支持内置极值函数 is_local_max/is_local_min/is_global_max/is_global_min。
+        """
+
+        result: dict[str, list[float]] = {}
+
+        for reg in self.registered_events:
+            event_id = reg["event_id"]
+            expression = reg["expression"]
+            direction = reg["direction"]
+            event_type = reg.get("event_type", "crossing")
+
+            if event_type == "bool":
+                trigger_times = self._solve_bool_event(ctx, expression)
+            else:
+                trigger_times = self._solve_crossing_event(ctx, expression, direction)
+
+            result[event_id] = trigger_times
+        
+        # 将段退出事件的触发结果也加入
+        for seg_result in self.segment_results:
+            result[seg_result.triggered_event] = [seg_result.solution.t1]
+
+        return result
+
+    def _solve_crossing_event(
+        self, ctx: PhysicsContext, expression: str, direction: int
+    ) -> list[float]:
+        """求解零点穿越事件的触发时刻。"""
+        from phyanim.core.enhance.trigger import CrossingTrigger
+
+        trigger = CrossingTrigger(expression=expression, direction=direction)
+
+        def eval_func(t: float) -> float:
+            return ctx.eval_expr(expression, "float", t)
+
+        trigger_times: list[float] = []
+        old_t: float | None = None
+
+        for t in ctx.times:
+            if old_t is not None:
+                event_t = trigger(old_t, t, eval_func)
+                if event_t is not None:
+                    trigger_times.append(event_t)
+            old_t = t
+
+        return trigger_times
+
+    def _solve_bool_event(
+        self, ctx: PhysicsContext, expression: str
+    ) -> list[float]:
+        """求解布尔条件事件的触发时刻。
+
+        支持内置极值函数 is_local_max/is_local_min/is_global_max/is_global_min。
+        当布尔表达式从 False 变为 True 时触发。
+        """
+        import re
+
+        # 1. 预处理：提取极值函数调用，替换为占位符。
+        # is_local_max(expr) → __extremum_0__, is_global_min(expr) → __extremum_1__, ...
+        extremum_calls: list[dict] = []
+        pattern = re.compile(
+            r"(is_local_max|is_local_min|is_global_max|is_global_min)\s*\(\s*(.+?)\s*\)"
+        )
+
+        def replace_extremum(match: re.Match) -> str:
+            func_name = match.group(1)
+            inner_expr = match.group(2)
+            idx = len(extremum_calls)
+            placeholder = f"__extremum_{idx}__"
+            extremum_calls.append({
+                "func": func_name,
+                "expr": inner_expr,
+                "placeholder": placeholder,
+            })
+            return placeholder
+
+        processed_expr = pattern.sub(replace_extremum, expression)
+
+        # 2. 预计算极值函数在所有采样点的值。
+        extremum_values: list[list[bool]] = []  # [call_idx][time_idx] → bool
+        for call in extremum_calls:
+            values = self._eval_extremum_func(ctx, call["func"], call["expr"])
+            extremum_values.append(values)
+
+        # 3. 在每个采样点评估整个布尔表达式。
+        bool_values: list[bool] = []
+        for ti, t in enumerate(ctx.times):
+            # 构建极值占位符的值
+            extremum_map = {}
+            for ci, call in enumerate(extremum_calls):
+                extremum_map[call["placeholder"]] = extremum_values[ci][ti]
+
+            val = self._eval_bool_with_extremum(ctx, processed_expr, t, extremum_map)
+            bool_values.append(val)
+
+        # 4. 检测 False → True 跳变。
+        trigger_times: list[float] = []
+        for i in range(1, len(bool_values)):
+            if not bool_values[i - 1] and bool_values[i]:
+                trigger_times.append(ctx.times[i])
+
+        return trigger_times
+
+    def _eval_extremum_func(
+        self, ctx: PhysicsContext, func_name: str, expr: str
+    ) -> list[bool]:
+        """评估极值函数在所有采样点的布尔值。
+
+        Parameters
+        ----------
+        func_name: is_local_max / is_local_min / is_global_max / is_global_min
+        expr: 被检测的表达式字符串
+        """
+        values = [ctx.eval_expr(expr, "float", t) for t in ctx.times]
+
+        if not values:
+            return []
+
+        results: list[bool] = [False] * len(values)
+
+        if func_name == "is_global_max":
+            global_max = max(values)
+            for i, v in enumerate(values):
+                results[i] = abs(v - global_max) < 1e-12
+
+        elif func_name == "is_global_min":
+            global_min = min(values)
+            for i, v in enumerate(values):
+                results[i] = abs(v - global_min) < 1e-12
+
+        elif func_name == "is_local_max":
+            for i in range(len(values)):
+                if i == 0 or i == len(values) - 1:
+                    continue  # 边界点不算极值
+                if values[i] > values[i - 1] and values[i] > values[i + 1]:
+                    results[i] = True
+
+        elif func_name == "is_local_min":
+            for i in range(len(values)):
+                if i == 0 or i == len(values) - 1:
+                    continue
+                if values[i] < values[i - 1] and values[i] < values[i + 1]:
+                    results[i] = True
+
+        return results
+
+    def _eval_bool_with_extremum(
+        self,
+        ctx: PhysicsContext,
+        expr: str,
+        t: float,
+        extremum_map: dict[str, bool],
+    ) -> bool:
+        """评估包含极值占位符的布尔表达式。
+
+        策略：
+        1. 将极值占位符替换为 Python True/False。
+        2. 将 & 和 | 替换为 Python and/or。
+        3. 对剩余的 sympy 子表达式（如 y > 3）用 eval_expr 评估。
+        4. 用 Python 逻辑合并所有部分。
+        """
+        if not extremum_map:
+            try:
+                return ctx.eval_expr(expr, "bool", t)
+            except Exception:
+                return False
+
+        # 替换占位符为 True/False
+        processed = expr
+        for placeholder, val in extremum_map.items():
+            processed = processed.replace(placeholder, "True" if val else "False")
+
+        # 将 & 和 | 替换为 Python and/or（注意保留优先级，加括号）
+        # 先把 True/False 用括号包裹
+        processed = processed.replace("True", "(True)").replace("False", "(False)")
+        # 替换逻辑运算符
+        processed = processed.replace("&", " and ").replace("|", " or ")
+
+        # 现在需要评估所有非 True/False 的 sympy 子表达式
+        # 用正则找到所有不是 True/False/and/or 的表达式片段
+        # 更简单的方法：把 (y > 3) 这种子表达式替换为 eval_expr 的结果
+        import re
+
+        # 找到所有括号内的表达式（排除 True/False/and/or）
+        def replace_sympy_expr(match):
+            inner = match.group(1).strip()
+            if inner in ("True", "False"):
+                return match.group(0)
+            try:
+                val = ctx.eval_expr(inner, "bool", t)
+                return "True" if val else "False"
+            except Exception:
+                try:
+                    val = ctx.eval_expr(inner, "float", t)
+                    return "True" if val > 0 else "False"
+                except Exception:
+                    return "False"
+
+        # 匹配 (expr) 但不匹配 (True) (False)
+        processed = re.sub(r"\(([^()]+)\)", replace_sympy_expr, processed)
+
+        try:
+            return bool(eval(processed))
+        except Exception:
+            return False
 
     def _validate_segment(self, segment: PhysicsSegment) -> None:
         if segment.segment_id in {existing.segment_id for existing in self.segments}:

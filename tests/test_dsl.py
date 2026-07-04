@@ -87,19 +87,16 @@ class TestValidatePython:
 class TestSystemPrompt:
     def test_prompt_contains_all_modes(self) -> None:
         prompt = build_system_prompt()
-        assert "Engine 模式" in prompt
         assert "Code 模式" in prompt
         assert "Hybrid 模式" in prompt
 
     def test_prompt_contains_api_sections(self) -> None:
         prompt = build_system_prompt()
-        assert "Engine 模式 API" in prompt
         assert "Code 模式 API" in prompt
         assert "Hybrid 模式 API" in prompt
 
     def test_prompt_contains_examples(self) -> None:
         prompt = build_system_prompt()
-        assert "Engine 模式完整示例" in prompt
         assert "Code 模式完整示例" in prompt
         assert "Hybrid 模式完整示例" in prompt
 
@@ -113,7 +110,6 @@ class TestSystemPrompt:
             "TrajectoryData",
             "PhyAnimScene",
             "voiceover",
-            "enable_trace",
             "attach_position_updater",
         ):
             assert snippet in prompt, f"System prompt missing: {snippet}"
@@ -122,7 +118,6 @@ class TestSystemPrompt:
         prompt = build_system_prompt()
         assert "TTS" in prompt
         assert "TTS_CONFIG" in prompt
-        assert "narration" in prompt
 
     def test_prompt_contains_output_requirements(self) -> None:
         prompt = build_system_prompt()

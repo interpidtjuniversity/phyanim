@@ -18,7 +18,10 @@ from phyanim.api.helpers import (
     attach_position_updater,
     attach_expr_updater,
     interpolate_trajectory,
-    create_bound_mobject,
+    attach_line,
+    attach_mobject,
+    attach_mobject_with_event,
+    detach_mobject_with_event,
 )
 
 # Geometry entities.
@@ -80,8 +83,11 @@ __all__ = [
     "create_tracker",
     "attach_position_updater",
     "attach_expr_updater",
-    "create_bound_mobject",
     "interpolate_trajectory",
+    "attach_line",
+    "attach_mobject",
+    "attach_mobject_with_event",
+    "detach_mobject_with_event",
     # Geometry
     "Block",
     "CircularArcTrack",
