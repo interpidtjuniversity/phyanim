@@ -236,6 +236,7 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
   - 箭头零长度：速度为0时 Arrow 崩溃 → 检查 abs(v) > 0.01 再设置
   - wait(0)：manim 不接受 → 用 max(0.1, duration)
   - 使用manim中的API但是忘记了ipmport：import时为了避免报错统一使用 from manim import *
+  - MathTex渲染错误：数学公式使用 MathTex，所有中文文本统一使用 Text，严禁在 MathTex 内部嵌入中文，规避 LaTeX 跨环境兼容故障
 """
 
 
@@ -399,7 +400,6 @@ voiceover 用法：
 
 注意：
   - 在这种模式中你需要自行实现物理求解（如手写 RK4 或用 scipy.integrate.solve_ivp）
-  - MathTex 中文支持已由框架自动配置（xelatex + CJK 字体），无需手动设置模板
 
 常见陷阱（务必避免）：
   - Arrow 零长度崩溃：当速度为0时，Arrow 的 start==end 会导致 manim 崩溃。
@@ -558,7 +558,6 @@ TrajectoryData API（hybrid 模式核心）：
 
 注意：
   - 物理方程用 engine 模式相同的 API 声明（PhysicObject2D, PhysicsSegment 等）
-  - MathTex 中文支持已由框架自动配置（xelatex + CJK 字体），无需手动设置模板
   - 物体运动超出默认画面约14×8单位时，在 construct 开头设置相机：
       self.camera.frame_height = 12
       self.camera.frame_width = 20
@@ -608,7 +607,6 @@ from phyanim.voiceover import PhyAnimScene
 class GeneratedScene(PhyAnimScene):
     def construct(self):
         self.setup_speech(TTS_CONFIG)
-        # MathTex 中文支持已由框架自动配置，无需手动设置
 
         ball = Circle(radius=0.15, color=YELLOW)
         ball.set_fill(YELLOW, opacity=1.0)
@@ -822,7 +820,6 @@ def create_track_geom():
 class GoldenExampleScene(PhyAnimScene):
     def construct(self):
         self.setup_speech(TTS_CONFIG)
-        # MathTex 中文支持已由框架自动配置，无需手动设置
         self.camera.background_color = BG_COLOR
 
         # 求解物理
