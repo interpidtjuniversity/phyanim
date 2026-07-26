@@ -22,6 +22,7 @@ import traceback
 from typing import Any
 
 from flask import Flask, jsonify, request, send_file
+from sympy import N
 
 from phyanim.server.config import ServerConfig
 from phyanim.server.jobs import RenderJobManager, is_valid_script_name
@@ -61,7 +62,7 @@ def create_app(config: ServerConfig) -> Flask:
             "script_name": job["script_name"],
             "status": "failed",
             "error_code": job.get("error_code", "render_failed"),
-            "error": "Video generation failed",
+            "error": job.get(""),
         }), 500
 
     @app.route("/generate_video", methods=["POST"])
@@ -74,6 +75,10 @@ def create_app(config: ServerConfig) -> Flask:
         prompt_value = data.get("user_prompt") or data.get("prompt")
         if not isinstance(prompt_value, str) or not prompt_value.strip():
             return jsonify({"error": "Missing 'prompt' field"}), 400
+        
+        history_messages = data.get("history_messages")
+        if history_messages is None:
+            history_messages = []
 
         image_urls = data.get("image_urls")
         if image_urls is None:
@@ -84,7 +89,7 @@ def create_app(config: ServerConfig) -> Flask:
             return jsonify({"error": "'image_urls' must be a list of strings"}), 400
 
         try:
-            job = job_manager().submit(prompt_value.strip(), image_urls)
+            job = job_manager().submit(prompt_value.strip(), history_messages, image_urls)
             return jsonify({
                 "script_name": job["script_name"],
                 "status": "queued",
@@ -103,7 +108,7 @@ def create_app(config: ServerConfig) -> Flask:
         job = job_manager().get(script_name)
         if job is None:
             return jsonify({"error": "Video job not found"}), 404
-        return jsonify({"status": job["status"]})
+        return jsonify({"status": job["status"], "error_code": job.get("error_code", None), "error": job.get("error", None)})
 
     @app.route("/get_video", methods=["GET"])
     def get_video() -> Any:
@@ -119,7 +124,7 @@ def create_app(config: ServerConfig) -> Flask:
         if job["status"] in _ACTIVE_STATUSES:
             return jsonify({"error": "Video is not ready"}), 409
         if job["status"] == "failed":
-            return jsonify({"error": "Video generation failed"}), 409
+            return jsonify({"error": job.get('error')}), 409
 
         video_path = manager.find_video(script_name)
         if video_path is None:

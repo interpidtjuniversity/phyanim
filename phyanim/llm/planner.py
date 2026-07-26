@@ -38,6 +38,7 @@ class PhysicsLLMPlanner:
     def plan(
         self,
         problem_text: str,
+        history_messages: list[Any],
         *,
         options: list[str] | None = None,
         images: list[str] | None = None,
@@ -75,7 +76,7 @@ class PhysicsLLMPlanner:
             problem_text, options=options, analysis=analysis, extra=extra
         )
         raw_response = self.client.complete_text(
-            system_prompt, user_prompt, images=images
+            system_prompt, user_prompt, history_messages, images=images
         )
         code = _extract_code(raw_response)
         try:
@@ -88,7 +89,7 @@ class PhysicsLLMPlanner:
                 "请重新输出完整的 Python 代码。必须修复该错误，不要解释。"
             )
             raw_response = self.client.complete_text(
-                system_prompt, repair_prompt, images=images
+                system_prompt, repair_prompt, history_messages, images=images
             )
             code = _extract_code(raw_response)
             _validate_python(code)
@@ -97,6 +98,11 @@ class PhysicsLLMPlanner:
         # Inject media_dir setting so all manim output stays in the specified directory.
         if self.media_dir:
             code = _inject_media_dir(code, self.media_dir)
+        # Force headless mode so errors don't hang on preview windows or dialogs.
+        code = _inject_headless_config(code)
+        # Force immediate exit on unhandled exceptions (Manim leaves non-daemon
+        # writer threads running otherwise).
+        code = _inject_force_exit_hook(code)
         # Rename Scene class if requested (affects manim output filename).
         if scene_name:
             code = _rename_scene_class(code, scene_name)
@@ -243,6 +249,67 @@ def _inject_media_dir(code: str, media_dir: str) -> str:
         return "\n".join(lines)
 
     return media_line + "\n" + code
+
+
+def _inject_headless_config(code: str) -> str:
+    """Force Manim into non-interactive headless mode.
+
+    Prevents the render process from opening a preview window or file
+    browser on error, which would keep the subprocess alive indefinitely.
+    """
+    headless_line = (
+        "from manim import config as _manim_config; "
+        "_manim_config.preview = False; "
+        "_manim_config.force_window = False; "
+        "_manim_config.show_in_file_browser = False"
+    )
+
+    lines = code.split("\n")
+    insert_idx = None
+    for i, line in enumerate(lines):
+        if "sys.path.insert" in line:
+            insert_idx = i + 1
+
+    if insert_idx is not None:
+        lines.insert(insert_idx, "")
+        lines.insert(insert_idx + 1, headless_line)
+        return "\n".join(lines)
+
+    return headless_line + "\n" + code
+
+
+def _inject_force_exit_hook(code: str) -> str:
+    """Install a sys.excepthook that forces immediate process exit on error.
+
+    Manim's SceneFileWriter creates a non-daemon writer thread.  If
+    ``construct()`` raises, the normal cleanup that joins this thread is
+    skipped, so the Python interpreter hangs waiting for it.  This hook
+    calls ``os._exit(1)`` to bypass thread cleanup and exit immediately.
+    """
+    hook_block = (
+        "import sys\n"
+        "import os\n"
+        "import traceback\n"
+        "\n"
+        "def _phyanim_force_exit(exc_type, exc_value, tb):\n"
+        "    traceback.print_exception(exc_type, exc_value, tb)\n"
+        "    os._exit(1)\n"
+        "\n"
+        "sys.excepthook = _phyanim_force_exit\n"
+    )
+
+    lines = code.split("\n")
+    insert_idx = None
+    for i, line in enumerate(lines):
+        if "sys.path.insert" in line:
+            insert_idx = i + 1
+
+    if insert_idx is not None:
+        lines.insert(insert_idx, "")
+        lines.insert(insert_idx + 1, hook_block.rstrip())
+        return "\n".join(lines)
+
+    return hook_block + code
 
 
 def _rename_scene_class(code: str, new_name: str) -> str:

@@ -48,7 +48,7 @@ class RenderJobManager:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._recover_jobs()
 
-    def submit(self, prompt: str, image_urls: list[str]) -> dict[str, Any]:
+    def submit(self, prompt: str, history_messages: list[Any], image_urls: list[str]) -> dict[str, Any]:
         """Create a persisted job and start its worker thread."""
         script_name = self._new_script_name()
         now = _utc_now()
@@ -64,7 +64,7 @@ class RenderJobManager:
 
         worker = threading.Thread(
             target=self._run_job,
-            args=(script_name, prompt, image_urls),
+            args=(script_name, prompt, history_messages, image_urls),
             name=f"render-{script_name}",
             daemon=True,
         )
@@ -106,6 +106,7 @@ class RenderJobManager:
         self,
         script_name: str,
         prompt: str,
+        history_messages: list[Any],
         image_urls: list[str],
     ) -> None:
         try:
@@ -119,6 +120,7 @@ class RenderJobManager:
             logger.info("[%s] Generating code", script_name)
             code = planner.plan(
                 prompt,
+                history_messages,
                 images=image_urls or None,
                 scene_name=script_name,
             )
@@ -181,7 +183,7 @@ class RenderJobManager:
         return f"Rendering failed with exit code {returncode}"
 
     def _fail(self, script_name: str, error_code: str, message: str) -> None:
-        clean_message = " ".join(message.split())[:1000] or "Unknown failure"
+        clean_message = " ".join(message.split())[:3000] or "Unknown failure"
         self._update(
             script_name,
             status="failed",

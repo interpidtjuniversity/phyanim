@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from sympy.printing.c import none
+
 
 @dataclass(frozen=True)
 class LLMConfig:
@@ -47,6 +49,7 @@ class LLMClient(Protocol):
         self,
         system_prompt: str,
         user_prompt: str,
+        history_messages: list[Any],
         images: list[str] | None = None,
     ) -> str:
         """Call the model and return raw text (Python code, etc.).
@@ -86,17 +89,24 @@ class DeepSeekClient:
         self,
         system_prompt: str,
         user_prompt: str,
+        history_messages: list[Any],
         images: list[str] | None = None,
     ) -> str:
+        messages = []
+        messages.append({"role": "system", "content": system_prompt})
+
+        if history_messages is not None:
+            messages.extend(history_messages)
+        messages.append({"role": "user", "content": user_prompt})
+
         payload = {
             "model": self.config.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": messages,
             "temperature": 0.2,
             "reasoning_effort": "max",
         }
+
+        print(payload)
         response = self._post("/chat/completions", payload)
         return response["choices"][0]["message"]["content"]
 
@@ -161,6 +171,7 @@ class OpenAICompatibleClient:
         self,
         system_prompt: str,
         user_prompt: str,
+        history_messages: list[Any],
         images: list[str] | None = None,
     ) -> str:
         user_content: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
@@ -170,12 +181,15 @@ class OpenAICompatibleClient:
                 {"type": "image_url", "image_url": {"url": data_url}}
             )
 
+        messages = []
+        messages.append({"role": "system", "content": system_prompt})
+        if history_messages is not None:
+            messages.extend(history_messages)
+        messages.append({"role": "user", "content": user_content})
+
         payload = {
             "model": self.config.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
+            "messages": messages,
             "temperature": 0.2,
         }
         response = self._post("/chat/completions", payload)

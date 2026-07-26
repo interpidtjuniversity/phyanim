@@ -237,6 +237,7 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
   - wait(0)：manim 不接受 → 用 max(0.1, duration)
   - 使用manim中的API但是忘记了ipmport：import时为了避免报错统一使用 from manim import *
   - MathTex渲染错误：数学公式使用 MathTex，所有中文文本统一使用 Text，严禁在 MathTex 内部嵌入中文，规避 LaTeX 跨环境兼容故障
+  - 物理段缺失end_event结束事件：一个物理段必须定义段结束事件。
 """
 
 
