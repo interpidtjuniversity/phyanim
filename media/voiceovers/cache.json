@@ -1,0 +1,172 @@
+[
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\4010f74d664179b002dcc8f5e655b3b7.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\4010f74d664179b002dcc8f5e655b3b7.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\7f866ef92cd7492d9b1707a89ed1dfde.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\7f866ef92cd7492d9b1707a89ed1dfde.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\6d3810e41dc8a553b942afba407e01e5.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\6d3810e41dc8a553b942afba407e01e5.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\a0f21049db94a4b604d1e040a80d08cf.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\a0f21049db94a4b604d1e040a80d08cf.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\2922eb23c7c36090bba7ad01ad58a587.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\2922eb23c7c36090bba7ad01ad58a587.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\78443986635185bd8f0dabe31634b89c.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\78443986635185bd8f0dabe31634b89c.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\a8c44dc56598b0082ee186195bf90480.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\a8c44dc56598b0082ee186195bf90480.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\b4d7ec1fca807f8d2d85cd2a648e51a3.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\b4d7ec1fca807f8d2d85cd2a648e51a3.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\0c41b289cb3dcbc4cf184c53122acf57.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\0c41b289cb3dcbc4cf184c53122acf57.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\637be5d680a878e1b0efc452f7cd0532.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\637be5d680a878e1b0efc452f7cd0532.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "4010f74d664179b002dcc8f5e655b3b7.wav",
+    "final_audio": "4010f74d664179b002dcc8f5e655b3b7.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "7f866ef92cd7492d9b1707a89ed1dfde.wav",
+    "final_audio": "7f866ef92cd7492d9b1707a89ed1dfde.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "6d3810e41dc8a553b942afba407e01e5.wav",
+    "final_audio": "6d3810e41dc8a553b942afba407e01e5.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "a0f21049db94a4b604d1e040a80d08cf.wav",
+    "final_audio": "a0f21049db94a4b604d1e040a80d08cf.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "2922eb23c7c36090bba7ad01ad58a587.wav",
+    "final_audio": "2922eb23c7c36090bba7ad01ad58a587.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "78443986635185bd8f0dabe31634b89c.wav",
+    "final_audio": "78443986635185bd8f0dabe31634b89c.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "a8c44dc56598b0082ee186195bf90480.wav",
+    "final_audio": "a8c44dc56598b0082ee186195bf90480.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "b4d7ec1fca807f8d2d85cd2a648e51a3.wav",
+    "final_audio": "b4d7ec1fca807f8d2d85cd2a648e51a3.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "0c41b289cb3dcbc4cf184c53122acf57.wav",
+    "final_audio": "0c41b289cb3dcbc4cf184c53122acf57.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "637be5d680a878e1b0efc452f7cd0532.wav",
+    "final_audio": "637be5d680a878e1b0efc452f7cd0532.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\5a19b0eef8e066017b53d25d7356145f.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\5a19b0eef8e066017b53d25d7356145f.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\000734dc81cfbf28c0083479b063f357.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\000734dc81cfbf28c0083479b063f357.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "4010f74d664179b002dcc8f5e655b3b7.wav",
+    "final_audio": "4010f74d664179b002dcc8f5e655b3b7.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "7f866ef92cd7492d9b1707a89ed1dfde.wav",
+    "final_audio": "7f866ef92cd7492d9b1707a89ed1dfde.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "6d3810e41dc8a553b942afba407e01e5.wav",
+    "final_audio": "6d3810e41dc8a553b942afba407e01e5.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "a0f21049db94a4b604d1e040a80d08cf.wav",
+    "final_audio": "a0f21049db94a4b604d1e040a80d08cf.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "2922eb23c7c36090bba7ad01ad58a587.wav",
+    "final_audio": "2922eb23c7c36090bba7ad01ad58a587.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "78443986635185bd8f0dabe31634b89c.wav",
+    "final_audio": "78443986635185bd8f0dabe31634b89c.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\6db7d908ce12e0e8bfbe0da7ae0cb06b.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\6db7d908ce12e0e8bfbe0da7ae0cb06b.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "b4d7ec1fca807f8d2d85cd2a648e51a3.wav",
+    "final_audio": "b4d7ec1fca807f8d2d85cd2a648e51a3.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\2a35258bc11904561be6991adbbe802a.wav",
+    "final_audio": "D:\\clcy\\pythonplayground\\phyanim\\media\\voiceovers\\2a35258bc11904561be6991adbbe802a.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "637be5d680a878e1b0efc452f7cd0532.wav",
+    "final_audio": "637be5d680a878e1b0efc452f7cd0532.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "5a19b0eef8e066017b53d25d7356145f.wav",
+    "final_audio": "5a19b0eef8e066017b53d25d7356145f.wav",
+    "sample_rate": 32000
+  },
+  {
+    "original_audio": "000734dc81cfbf28c0083479b063f357.wav",
+    "final_audio": "000734dc81cfbf28c0083479b063f357.wav",
+    "sample_rate": 32000
+  }
+]

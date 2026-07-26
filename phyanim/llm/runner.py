@@ -3,11 +3,6 @@
 Provides convenience helpers to write generated code to a file and execute
 it to render a video.  All manim artifacts (videos, tex, text, images,
 audio, partial movies) are confined to a single ``media_dir``.
-
-Usage::
-
-    from phyanim.llm import render_code
-    render_code(code, media_dir="/home/phyanim/media")
 """
 
 from __future__ import annotations
@@ -18,52 +13,28 @@ import sys
 from pathlib import Path
 
 
-def render_code(
+def prepare_render_script(
     code: str,
     media_dir: str | Path | None = None,
     script_name: str = "generated_animation.py",
     output_dir: str | Path | None = None,
-) -> Path:
-    """Write *code* to a script and execute it to render a video.
-
-    All manim output (videos, tex, text, images, audio, partial movies)
-    goes under ``<media_dir>/media/``.  The generated .py script goes
-    under ``<media_dir>/code/`` (or ``output_dir`` if given).
-
-    Parameters
-    ----------
-    code:
-        Python source code produced by :class:`PhysicsLLMPlanner`.
-    media_dir:
-        Root directory for all generated files.  manim's ``config.media_dir``
-        is set to ``<media_dir>/media/`` so ALL artifacts stay here.
-        Defaults to ``<cwd>/media``.
-    script_name:
-        File name for the generated script.
-    output_dir:
-        Override directory for the .py script (defaults to
-        ``<media_dir>/code/``).
-
-    Returns
-    -------
-    Path
-        Path to the generated script.
-    """
-    # Resolve directories.
+) -> tuple[Path, Path]:
+    """Write generated code and return its path and the manim media path."""
     root = Path(media_dir).resolve() if media_dir else Path.cwd() / "media"
     root.mkdir(parents=True, exist_ok=True)
 
-    # Script goes to <root>/code/ (or output_dir if given).
     script_dir = Path(output_dir).resolve() if output_dir else root / "code"
     script_dir.mkdir(parents=True, exist_ok=True)
     script_path = script_dir / script_name
     script_path.write_text(code, encoding="utf-8")
 
-    # manim media goes to <root>/media/.
     manim_media = root / "media"
     manim_media.mkdir(parents=True, exist_ok=True)
+    return script_path, manim_media
 
-    # Build environment.
+
+def build_render_environment(manim_media: str | Path) -> dict[str, str]:
+    """Build the environment used by generated render scripts."""
     env = os.environ.copy()
     project_root = Path(__file__).resolve().parents[2]
     existing_pythonpath = env.get("PYTHONPATH", "")
@@ -72,27 +43,66 @@ def render_code(
         if existing_pythonpath
         else str(project_root)
     )
-
-    # Set manim's media_dir via environment variable so the generated
-    # script picks it up.  manim reads MANIM_MEDIA_DIR if set.
     env["MANIM_MEDIA_DIR"] = str(manim_media)
+    return env
 
-    result = subprocess.run(
+
+def start_render_process(
+    code: str,
+    media_dir: str | Path | None = None,
+    script_name: str = "generated_animation.py",
+    output_dir: str | Path | None = None,
+) -> tuple[Path, subprocess.Popen[str]]:
+    """Write generated code and start its renderer without waiting."""
+    script_path, manim_media = prepare_render_script(
+        code,
+        media_dir=media_dir,
+        script_name=script_name,
+        output_dir=output_dir,
+    )
+    process = subprocess.Popen(
         [sys.executable, str(script_path)],
         cwd=str(manim_media),
-        env=env,
-        capture_output=True,
+        env=build_render_environment(manim_media),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        encoding='utf-8',
-        errors='replace',
+        encoding="utf-8",
+        errors="replace",
     )
-    if result.returncode != 0:
+    return script_path, process
+
+
+def render_code(
+    code: str,
+    media_dir: str | Path | None = None,
+    script_name: str = "generated_animation.py",
+    output_dir: str | Path | None = None,
+) -> Path:
+    """Write *code* to a script and execute it to render a video.
+
+    All manim output goes under ``<media_dir>/media/``. The generated script
+    goes under ``<media_dir>/code/`` (or ``output_dir`` if supplied).
+    """
+    script_path, process = start_render_process(
+        code,
+        media_dir=media_dir,
+        script_name=script_name,
+        output_dir=output_dir,
+    )
+    stdout, stderr = process.communicate()
+    if process.returncode != 0:
         raise RuntimeError(
-            f"Rendering failed (exit code {result.returncode}).\n"
-            f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
+            f"Rendering failed (exit code {process.returncode}).\n"
+            f"stdout:\n{stdout}\n"
+            f"stderr:\n{stderr}"
         )
     return script_path
 
 
-__all__ = ["render_code"]
+__all__ = [
+    "build_render_environment",
+    "prepare_render_script",
+    "render_code",
+    "start_render_process",
+]

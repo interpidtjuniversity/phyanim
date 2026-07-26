@@ -226,7 +226,10 @@ def _inject_media_dir(code: str, media_dir: str) -> str:
     # Normalize to absolute path string.
     from pathlib import Path
     abs_media = str(Path(media_dir).resolve())
-    media_line = f'from manim import config as _manim_config; _manim_config.media_dir = "{abs_media}"'
+    media_line = (
+        "from manim import config as _manim_config; "
+        f"_manim_config.media_dir = {abs_media!r}"
+    )
 
     lines = code.split("\n")
     insert_idx = None

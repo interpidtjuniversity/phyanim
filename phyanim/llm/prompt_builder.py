@@ -476,7 +476,7 @@ TrajectoryData API（hybrid 模式核心）：
   trajectory.value_at(name, t) → float             # 状态/derived变量在物理时间t的值
   trajectory.eval_expr(expr, t) → float            # 求值SymPy表达式
   trajectory.eval_expr_bool(expr, t) → bool        # 求值布尔表达式
-  trajectory.eval_position(obj_id, t) → [(x,y)]   # 对象笛卡尔坐标
+  trajectory.eval_position(obj_id, t) → [(x,y)]    # 对象笛卡尔坐标，注意这里返回为列表代表对象可能本身绑定多个笛卡尔坐标，列表的每个元素代表一个二维笛卡尔坐标(x,y)。所以需要区分清楚对象有几个笛卡尔坐标，然后使用第几个笛卡尔坐标。
   trajectory.find_segment(t) → str                 # 查找时间t所属段ID
   trajectory.segment_times(segment_id) → (start, end)
   trajectory.sample(name, dt=None) → (times, values)  # 采样数组

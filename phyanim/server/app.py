@@ -1,143 +1,149 @@
-"""Flask server exposing the /generate_video endpoint.
-
-Accepts a user prompt (and optional image URLs), calls the LLM to generate
-Python animation code, renders it to a video, and returns the video file.
-ALL generated files (scripts, videos, tex, audio, images) are confined
-to the configured ``media_dir``.
-
-Usage::
-
-    from phyanim.server.config import ServerConfig, LLMProvider
-    from phyanim.server.app import create_app
-
-    config = ServerConfig(
-        llm_provider=LLMProvider.DEEPSEEK,
-        llm_api_key="sk-...",
-        tts=TTSConfig(provider="minimax", api_key="...", voice_id="male-qn-qingse"),
-        media_dir="/home/phyanim/media",
-    )
-    app = create_app(config)
-    app.run(host="0.0.0.0", port=5000)
+"""Flask server for asynchronous physics animation generation.
 
 API:
     POST /generate_video
         Body: {"prompt": "...", "image_urls": ["..."]}
+        Returns a unique ``script_name`` immediately.
 
-    Response: video file (mp4)
+    GET /get_video?script_name=Scene_...
+        Returns job status or the completed MP4 file.
+
+    GET /get_code?script_name=Scene_...
+        Returns job status or the generated render code.
 """
 
 from __future__ import annotations
 
 import logging
-import time
 import traceback
-from pathlib import Path
 from typing import Any
 
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, jsonify, request, send_file
 
-from phyanim.llm.planner import PhysicsLLMPlanner, CodeValidationError
-from phyanim.llm.runner import render_code
 from phyanim.server.config import ServerConfig
+from phyanim.server.jobs import RenderJobManager, is_valid_script_name
 
 logger = logging.getLogger(__name__)
 
+_ACTIVE_STATUSES = frozenset({"queued", "generating", "rendering"})
+
 
 def create_app(config: ServerConfig) -> Flask:
-    """Create and configure the Flask application.
-
-    Parameters
-    ----------
-    config:
-        Server configuration (LLM provider, TTS, media_dir, etc.).
-    """
+    """Create and configure the Flask application."""
     app = Flask(__name__)
+    app.json.ensure_ascii = False
     app.config["SERVER_CONFIG"] = config
+    app.extensions["render_job_manager"] = RenderJobManager(config)
+
+    def job_manager() -> RenderJobManager:
+        return app.extensions["render_job_manager"]
+
+    def requested_job() -> tuple[str | None, tuple[Any, int] | None]:
+        script_name = request.args.get("script_name", "")
+        if not is_valid_script_name(script_name):
+            return None, (
+                jsonify({"error": "Invalid or missing 'script_name' parameter"}),
+                400,
+            )
+        return script_name, None
+
+    def status_response(job: dict[str, Any]) -> tuple[Any, int]:
+        return jsonify({
+            "script_name": job["script_name"],
+            "status": job["status"],
+        }), 202
+
+    def failure_response(job: dict[str, Any]) -> tuple[Any, int]:
+        return jsonify({
+            "script_name": job["script_name"],
+            "status": "failed",
+            "error_code": job.get("error_code", "render_failed"),
+            "error": "Video generation failed",
+        }), 500
 
     @app.route("/generate_video", methods=["POST"])
     def generate_video() -> Any:
-        """Generate a physics animation video from a natural language prompt.
+        """Queue code generation and rendering, returning its identifier."""
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
 
-        Request JSON body:
-            prompt (str, required): Natural language physics problem.
-            image_urls (list[str], optional): Image URLs for vision models.
-
-        Returns:
-            - On success: the rendered video file (mp4).
-            - On error: JSON with error details.
-        """
-        data = request.get_json(silent=True) or {}
-        prompt = (data.get("user_prompt") or data.get("prompt") or "").strip()
-        image_urls = data.get("image_urls") or []
-
-        if not prompt:
+        prompt_value = data.get("user_prompt") or data.get("prompt")
+        if not isinstance(prompt_value, str) or not prompt_value.strip():
             return jsonify({"error": "Missing 'prompt' field"}), 400
 
-        cfg: ServerConfig = app.config["SERVER_CONFIG"]
-
-        # Generate a unique timestamp for this request.
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        scene_name = f"Scene_{timestamp}"
-        script_name = f"generated_{timestamp}.py"
+        image_urls = data.get("image_urls")
+        if image_urls is None:
+            image_urls = []
+        if not isinstance(image_urls, list) or not all(
+            isinstance(url, str) for url in image_urls
+        ):
+            return jsonify({"error": "'image_urls' must be a list of strings"}), 400
 
         try:
-            # 1. Resolve media directory.
-            media_dir = cfg.resolved_media_dir()
-            manim_media = cfg.resolved_manim_media_dir()
-            code_dir = cfg.resolved_code_dir()
-
-            # 2. Create LLM client and planner.
-            #    Inject TTS config and media_dir into generated code.
-            client = cfg.make_llm_client()
-            planner = PhysicsLLMPlanner(
-                client,
-                tts_config=cfg.to_tts_dict(),
-                media_dir=str(manim_media),
-            )
-
-            # 3. Generate Python code from the prompt.
-            logger.info("[%s] Generating code for prompt: %s", timestamp, prompt[:100])
-            code = planner.plan(prompt, images=image_urls or None, scene_name=scene_name)
-            logger.info("[%s] Code generated (%d chars)", timestamp, len(code))
-
-            # 4. Render the code to a video.
-            #    All manim output goes to <media_dir>/media/.
-            logger.info("[%s] Rendering video...", timestamp)
-            script_path = render_code(
-                code,
-                media_dir=str(media_dir),
-                script_name=script_name,
-                output_dir=str(code_dir),
-            )
-
-            # 5. Find the rendered video file.
-            #    manim writes to <media_dir>/media/videos/.../<SceneName>.mp4
-            video_search_dir = manim_media / "videos"
-            video_files = list(video_search_dir.rglob("*.mp4"))
-            # Exclude partial movie files.
-            video_files = [f for f in video_files if "partial_movie" not in str(f)]
-
-            if not video_files:
-                return jsonify({"error": "No video file produced"}), 500
-
-            # Return the most recently modified video.
-            video_path = max(video_files, key=lambda f: f.stat().st_mtime)
-            logger.info("[%s] Video ready: %s", timestamp, video_path)
-
-            return send_file(
-                str(video_path),
-                mimetype="video/mp4",
-                as_attachment=True,
-                download_name=video_path.name,
-            )
-
-        except CodeValidationError as exc:
-            logger.error("Code validation failed: %s", exc)
-            return jsonify({"error": f"Code validation failed: {exc}"}), 422
-
+            job = job_manager().submit(prompt_value.strip(), image_urls)
+            return jsonify({
+                "script_name": job["script_name"],
+                "status": "queued",
+            }), 202
         except Exception as exc:
-            logger.error("Unexpected error: %s\n%s", exc, traceback.format_exc())
-            return jsonify({"error": str(exc)}), 500
+            logger.error("Unable to submit render job: %s\n%s", exc, traceback.format_exc())
+            return jsonify({"error": "Unable to submit video generation job"}), 500
+
+    @app.route("/get_video", methods=["GET"])
+    def get_video() -> Any:
+        """Return a job's MP4 when rendering has completed successfully."""
+        script_name, error = requested_job()
+        if error:
+            return error
+
+        manager = job_manager()
+        job = manager.get(script_name)
+        if job is None:
+            return jsonify({"error": "Video job not found"}), 404
+        if job["status"] in _ACTIVE_STATUSES:
+            return status_response(job)
+        if job["status"] == "failed":
+            return failure_response(job)
+
+        video_path = manager.find_video(script_name)
+        if video_path is None:
+            return jsonify({
+                "script_name": script_name,
+                "status": "failed",
+                "error_code": "video_not_found",
+                "error": "Rendered video file not found",
+            }), 500
+        return send_file(
+            str(video_path),
+            mimetype="video/mp4",
+            as_attachment=True,
+            download_name=video_path.name,
+        )
+
+    @app.route("/get_code", methods=["GET"])
+    def get_code() -> Any:
+        """Return the generated Python render code for a job."""
+        script_name, error = requested_job()
+        if error:
+            return error
+
+        manager = job_manager()
+        job = manager.get(script_name)
+        if job is None:
+            return jsonify({"error": "Video job not found"}), 404
+
+        code_path = manager.code_path(script_name)
+        if code_path.is_file():
+            return jsonify({
+                "script_name": script_name,
+                "code": code_path.read_text(encoding="utf-8"),
+            })
+        if job["status"] in _ACTIVE_STATUSES:
+            return status_response(job)
+        if job["status"] == "failed":
+            return failure_response(job)
+        return jsonify({"error": "Generated code not found"}), 404
 
     @app.route("/health", methods=["GET"])
     def health() -> Any:
