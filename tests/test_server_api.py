@@ -40,11 +40,9 @@ class _FailedProcess:
 def _wait_for_status(client, script_name: str, status: str) -> dict:
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
-        response = client.get("/get_video", query_string={"script_name": script_name})
+        response = client.get("/get_status", query_string={"script_name": script_name})
         if response.is_json and response.get_json().get("status") == status:
             return response.get_json()
-        if status == "succeeded" and response.status_code == 200:
-            return {"status": "succeeded"}
         time.sleep(0.01)
     pytest.fail(f"job {script_name} did not reach {status}")
 
@@ -122,7 +120,7 @@ def test_generate_video_validates_request(tmp_path) -> None:
     assert response.status_code == 400
 
 
-@pytest.mark.parametrize("endpoint", ["/get_video", "/get_code"])
+@pytest.mark.parametrize("endpoint", ["/get_status", "/get_video", "/get_code"])
 def test_query_rejects_unsafe_or_unknown_names(tmp_path, endpoint) -> None:
     client = create_app(ServerConfig(media_dir=str(tmp_path))).test_client()
 
@@ -130,33 +128,68 @@ def test_query_rejects_unsafe_or_unknown_names(tmp_path, endpoint) -> None:
     assert client.get(endpoint, query_string={"script_name": "Scene_unknown"}).status_code == 404
 
 
-def test_get_video_reports_active_and_failed_jobs(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "status",
+    ["queued", "generating", "rendering", "succeeded", "failed"],
+)
+def test_get_status_returns_only_status(tmp_path, status) -> None:
     app = create_app(ServerConfig(media_dir=str(tmp_path)))
     manager = app.extensions["render_job_manager"]
-    now = "2026-07-26T00:00:00+00:00"
+    manager._jobs["Scene_status"] = {
+        "script_name": "Scene_status",
+        "status": status,
+        "error": "private renderer details",
+        "pid": 1234,
+    }
+
+    response = app.test_client().get(
+        "/get_status",
+        query_string={"script_name": "Scene_status"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": status}
+
+
+def test_get_video_rejects_active_and_failed_jobs(tmp_path) -> None:
+    app = create_app(ServerConfig(media_dir=str(tmp_path)))
+    manager = app.extensions["render_job_manager"]
     manager._jobs["Scene_active"] = {
         "script_name": "Scene_active",
         "status": "rendering",
-        "created_at": now,
-        "updated_at": now,
     }
     manager._jobs["Scene_failed"] = {
         "script_name": "Scene_failed",
         "status": "failed",
-        "error_code": "render_failed",
-        "error": "renderer stopped",
-        "created_at": now,
-        "updated_at": now,
+        "error": "private renderer details",
     }
     client = app.test_client()
 
     active = client.get("/get_video", query_string={"script_name": "Scene_active"})
-    assert active.status_code == 202
-    assert active.get_json()["status"] == "rendering"
+    assert active.status_code == 409
+    assert active.get_json() == {"error": "Video is not ready"}
 
     failed = client.get("/get_video", query_string={"script_name": "Scene_failed"})
-    assert failed.status_code == 500
-    assert failed.get_json()["error_code"] == "render_failed"
+    assert failed.status_code == 409
+    assert failed.get_json() == {"error": "Video generation failed"}
+    assert b"private renderer details" not in failed.data
+
+
+def test_get_video_returns_404_when_completed_file_is_missing(tmp_path) -> None:
+    app = create_app(ServerConfig(media_dir=str(tmp_path)))
+    manager = app.extensions["render_job_manager"]
+    manager._jobs["Scene_missing"] = {
+        "script_name": "Scene_missing",
+        "status": "succeeded",
+    }
+
+    response = app.test_client().get(
+        "/get_video",
+        query_string={"script_name": "Scene_missing"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "Rendered video file not found"}
 
 
 def test_background_process_failure_is_persisted_and_sanitized(tmp_path, monkeypatch) -> None:
@@ -175,9 +208,7 @@ def test_background_process_failure_is_persisted_and_sanitized(tmp_path, monkeyp
     submitted = client.post("/generate_video", json={"prompt": "animate"}).get_json()
 
     failed = _wait_for_status(client, submitted["script_name"], "failed")
-    assert failed["error_code"] == "render_failed"
-    assert failed["error"] == "Video generation failed"
-    assert "private renderer details" not in failed["error"]
+    assert failed == {"status": "failed"}
 
     persisted = app.extensions["render_job_manager"].get(submitted["script_name"])
     assert "private renderer details" in persisted["error"]

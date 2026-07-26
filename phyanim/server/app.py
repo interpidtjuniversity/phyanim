@@ -5,8 +5,11 @@ API:
         Body: {"prompt": "...", "image_urls": ["..."]}
         Returns a unique ``script_name`` immediately.
 
+    GET /get_status?script_name=Scene_...
+        Returns only the persisted job status.
+
     GET /get_video?script_name=Scene_...
-        Returns job status or the completed MP4 file.
+        Returns the completed MP4 file.
 
     GET /get_code?script_name=Scene_...
         Returns job status or the generated render code.
@@ -90,6 +93,18 @@ def create_app(config: ServerConfig) -> Flask:
             logger.error("Unable to submit render job: %s\n%s", exc, traceback.format_exc())
             return jsonify({"error": "Unable to submit video generation job"}), 500
 
+    @app.route("/get_status", methods=["GET"])
+    def get_status() -> Any:
+        """Return only the persisted status of a video generation job."""
+        script_name, error = requested_job()
+        if error:
+            return error
+
+        job = job_manager().get(script_name)
+        if job is None:
+            return jsonify({"error": "Video job not found"}), 404
+        return jsonify({"status": job["status"]})
+
     @app.route("/get_video", methods=["GET"])
     def get_video() -> Any:
         """Return a job's MP4 when rendering has completed successfully."""
@@ -102,18 +117,13 @@ def create_app(config: ServerConfig) -> Flask:
         if job is None:
             return jsonify({"error": "Video job not found"}), 404
         if job["status"] in _ACTIVE_STATUSES:
-            return status_response(job)
+            return jsonify({"error": "Video is not ready"}), 409
         if job["status"] == "failed":
-            return failure_response(job)
+            return jsonify({"error": "Video generation failed"}), 409
 
         video_path = manager.find_video(script_name)
         if video_path is None:
-            return jsonify({
-                "script_name": script_name,
-                "status": "failed",
-                "error_code": "video_not_found",
-                "error": "Rendered video file not found",
-            }), 500
+            return jsonify({"error": "Rendered video file not found"}), 404
         return send_file(
             str(video_path),
             mimetype="video/mp4",
