@@ -17,14 +17,13 @@ def _make_tex_template() -> TexTemplate:
     return tpl
 
 
-_TEX_TEMPLATE = _make_tex_template()
-
 class TransitionContent(Content):
     def __init__(self, tex_strings: list[list[str]], pos_variables: tuple[str, str], direction: dict[int, str] = {}, font_size: int = 24):
         self.tex_strings = tex_strings
         self.pos_variables = pos_variables
 
         self.groups : list[VGroup] = []
+        _TEX_TEMPLATE = _make_tex_template()
 
         # 这里一会加tex的类型判断，是普通文本还是math tex
         for group_idx, group_tex_strings in enumerate(tex_strings):

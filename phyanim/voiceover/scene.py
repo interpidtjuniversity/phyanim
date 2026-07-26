@@ -54,7 +54,8 @@ class PhyAnimScene(_BaseVoiceoverScene):
         self._tts_config: TTSConfig = TTSConfig(provider="none")
         self._speech_ready: bool = False
         # Auto-configure xelatex + CJK font for MathTex so the LLM doesn't need to.
-        self._setup_tex_template()
+        # centos 版本过低，不支持 xelatex这里先不设置mathtex的中文字体，使用prompt进行若控制
+        # self._setup_tex_template()
 
     def _setup_tex_template(self) -> None:
         """Set up xelatex template with CJK font support.
@@ -110,11 +111,12 @@ class PhyAnimScene(_BaseVoiceoverScene):
             pass
 
         tpl = TexTemplate()
-        tpl.tex_compiler = "xelatex"
-        tpl.output_format = ".xdv"
-        if chosen_font:
-            tpl.add_to_preamble("\\usepackage{fontspec}")
-            tpl.add_to_preamble(f"\\setmainfont{{{chosen_font}}}")
+        tpl.tex_compiler = "latex"
+        tpl.output_format = ".dvi"
+        tpl.add_to_preamble(r"\usepackage{amsmath,amssymb}")
+        # if chosen_font:
+        #     tpl.add_to_preamble(r"\usepackage{fontspec}")
+        #     tpl.add_to_preamble(r"\setmainfont{{{chosen_font}}}")
         MathTex.set_default(tex_template=tpl)
 
     # ------------------------------------------------------------------
