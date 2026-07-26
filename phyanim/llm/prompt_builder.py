@@ -231,12 +231,12 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
   - 公式堆叠：10行公式 buff=0.2 排在一起溢出画面 → 检查高度，分批显示
   - 物体超出画面：运动范围 > 14 单位不调相机 → 必须设置相机
   - 语音动画不同步：语音10秒但动画2秒就播完 → 分段播放+暂停讲解
-  - 颜色混乱：所有元素都用白色 → 用配色方案区分主次
+  - 颜色混乱：所有元素都用白色 → 应该使用配色方案区分主次
   - 无过渡：直接 self.add/self.remove → 用 FadeIn/FadeOut/Create 过渡
   - 箭头零长度：速度为0时 Arrow 崩溃 → 检查 abs(v) > 0.01 再设置
   - wait(0)：manim 不接受 → 用 max(0.1, duration)
   - 使用manim中的API但是忘记了ipmport：import时为了避免报错统一使用 from manim import *
-  - MathTex渲染错误：数学公式使用 MathTex，所有中文文本统一使用 Text，严禁在 MathTex 内部嵌入中文，规避 LaTeX 跨环境兼容故障
+  - MathTex渲染错误：MathTex 只存放纯数学公式，严禁使用\\text{}；公式附带的单位、文字采用VGroup组合MathTex与Text拼接（确保贴合合适不能间距太远也不能太近导致重叠），隔离LaTeX文本字体切换逻辑，保障 Windows/Linux 跨平台稳定渲染。
   - 物理段缺失end_event结束事件：一个物理段必须定义段结束事件。
 """
 
