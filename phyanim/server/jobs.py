@@ -131,7 +131,7 @@ class RenderJobManager:
             
             prepare_source_script(source_code, self.root_dir, f"{script_name}.py", self.source_code_dir)
 
-            script_path = start_render_process( 
+            script_path, process = start_render_process( 
                 code,
                 media_dir=self.root_dir,
                 script_name=f"{script_name}.py",
