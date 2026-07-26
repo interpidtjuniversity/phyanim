@@ -17,6 +17,8 @@ from phyanim.llm.planner import CodeValidationError, PhysicsLLMPlanner
 from phyanim.llm.runner import start_render_process
 from phyanim.server.config import ServerConfig
 
+from phyanim.llm.runner import prepare_source_script
+
 logger = logging.getLogger(__name__)
 
 _ACTIVE_STATUSES = frozenset({"queued", "generating", "rendering"})
@@ -41,6 +43,7 @@ class RenderJobManager:
         self.config = config
         self.root_dir = config.resolved_media_dir()
         self.code_dir = config.resolved_code_dir()
+        self.source_code_dir = config.resolved_source_code_dir()
         self.manim_media_dir = config.resolved_manim_media_dir()
         self.jobs_dir = self.root_dir / "jobs"
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
@@ -77,8 +80,8 @@ class RenderJobManager:
             job = self._jobs.get(script_name)
             return dict(job) if job else None
 
-    def code_path(self, script_name: str) -> Path:
-        return self.code_dir / f"{script_name}.py"
+    def source_code_path(self, script_name: str) -> Path:
+        return self.source_code_dir / f"{script_name}.py"
 
     def find_video(self, script_name: str) -> Path | None:
         """Find the exact completed video for a job."""
@@ -118,15 +121,17 @@ class RenderJobManager:
                 media_dir=str(self.manim_media_dir),
             )
             logger.info("[%s] Generating code", script_name)
-            code = planner.plan(
+            source_code, code = planner.plan(
                 prompt,
                 history_messages,
                 images=image_urls or None,
                 scene_name=script_name,
             )
             logger.info("[%s] Code generated (%d chars)", script_name, len(code))
+            
+            prepare_source_script(source_code, self.root_dir, f"{script_name}.py", self.source_code_dir)
 
-            script_path, process = start_render_process(
+            script_path = start_render_process( 
                 code,
                 media_dir=self.root_dir,
                 script_name=f"{script_name}.py",

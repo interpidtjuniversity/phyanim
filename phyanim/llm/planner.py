@@ -78,9 +78,9 @@ class PhysicsLLMPlanner:
         raw_response = self.client.complete_text(
             system_prompt, user_prompt, history_messages, images=images
         )
-        code = _extract_code(raw_response)
+        source_code = _extract_code(raw_response)
         try:
-            _validate_python(code)
+            _validate_python(source_code)
         except CodeValidationError as exc:
             # One self-repair round-trip feeding the error back to the model.
             repair_prompt = (
@@ -91,10 +91,10 @@ class PhysicsLLMPlanner:
             raw_response = self.client.complete_text(
                 system_prompt, repair_prompt, history_messages, images=images
             )
-            code = _extract_code(raw_response)
-            _validate_python(code)
+            source_code = _extract_code(raw_response)
+            _validate_python(source_code)
         # Inject TTS_CONFIG into the generated code.
-        code = _inject_tts_config(code, self.tts_config)
+        code = _inject_tts_config(source_code, self.tts_config)
         # Inject media_dir setting so all manim output stays in the specified directory.
         if self.media_dir:
             code = _inject_media_dir(code, self.media_dir)
@@ -106,21 +106,7 @@ class PhysicsLLMPlanner:
         # Rename Scene class if requested (affects manim output filename).
         if scene_name:
             code = _rename_scene_class(code, scene_name)
-        return code
-
-    def plan_to_file(
-        self,
-        problem_text: str,
-        path: str,
-        **kwargs: Any,
-    ) -> str:
-        """Generate code and write it to *path*. Returns the code string."""
-        code = self.plan(problem_text, **kwargs)
-        from pathlib import Path
-        output_path = Path(path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(code, encoding="utf-8")
-        return code
+        return source_code, code
 
     def _build_user_prompt(
         self,

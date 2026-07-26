@@ -123,6 +123,7 @@ def main() -> None:
     print(f"  TTS Enabled  : {config.tts.enabled}")
     print(f"  Media Dir    : {media_dir}")
     print(f"  Code Dir     : {config.resolved_code_dir()}")
+    print(f"  Source Code Dir : {config.resolved_source_code_dir()}")
     print(f"  Manim Media  : {config.resolved_manim_media_dir()}")
     print(f"  Listen       : {args.host}:{args.port}")
     print("=" * 60)

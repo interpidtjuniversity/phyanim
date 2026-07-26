@@ -96,6 +96,12 @@ class ServerConfig:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
+    def resolved_source_code_dir(self) -> Path:
+        """Directory for source .py scripts (under media_dir/source_code/)."""
+        d = self.resolved_media_dir() / "source_code"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
     def resolved_manim_media_dir(self) -> Path:
         """Directory for manim media output (under media_dir/media/).
 

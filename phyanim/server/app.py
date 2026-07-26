@@ -148,7 +148,8 @@ def create_app(config: ServerConfig) -> Flask:
         if job is None:
             return jsonify({"error": "Video job not found"}), 404
 
-        code_path = manager.code_path(script_name)
+        # 只获取源码，不获取注入后的代码
+        code_path = manager.source_code_path(script_name)
         if code_path.is_file():
             return jsonify({
                 "script_name": script_name,

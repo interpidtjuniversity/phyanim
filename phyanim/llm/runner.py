@@ -32,6 +32,24 @@ def prepare_render_script(
     manim_media.mkdir(parents=True, exist_ok=True)
     return script_path, manim_media
 
+# 保存生成的源文件
+def prepare_source_script(
+    code: str,
+    media_dir: str | Path | None = None,
+    script_name: str = "generated_animation.py",
+    output_dir: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """Write generated code and return its path and the manim media path."""
+    root = Path(media_dir).resolve() if media_dir else Path.cwd() / "media"
+    root.mkdir(parents=True, exist_ok=True)
+
+    script_dir = Path(output_dir).resolve() if output_dir else root / "source_code"
+    script_dir.mkdir(parents=True, exist_ok=True)
+    script_path = script_dir / f"{script_name}"
+    script_path.write_text(code, encoding="utf-8")
+    
+    return script_path
+
 
 def build_render_environment(manim_media: str | Path) -> dict[str, str]:
     """Build the environment used by generated render scripts."""
