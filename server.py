@@ -6,11 +6,11 @@ Start the Flask server with configurable LLM provider, TTS, and media directory.
 Usage::
 
     # Basic
-    python server.py --media_dir /home/phyanim/media
+    python server.py --root_dir /home/phyanim/media
 
     # With specific LLM provider and TTS
     python server.py \\
-        --media_dir /home/phyanim/media \\
+        --root_dir /home/phyanim/media \\
         --llm_provider doubao \\
         --llm_api_key sk-... \\
         --tts_provider minimax \\
@@ -18,7 +18,7 @@ Usage::
         --tts_voice male-qn-qingse
 
     # Or use environment variables
-    PHYANIM_LLM_PROVIDER=doubao PHYANIM_LLM_API_KEY=sk-... python server.py --media_dir /home/phyanim/media
+    PHYANIM_LLM_PROVIDER=doubao PHYANIM_LLM_API_KEY=sk-... python server.py --root_dir /home/phyanim/media
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
 
     # Media directory — ALL generated files go here
     parser.add_argument(
-        "--media_dir",
+        "--root_dir",
         default="",
         help="Root directory for ALL generated files (scripts, videos, tex, audio, images). "
              "Defaults to <cwd>/media",
@@ -85,8 +85,8 @@ def build_config(args: argparse.Namespace) -> ServerConfig:
     config = ServerConfig.from_env()
 
     # Override with CLI args where provided.
-    if args.media_dir:
-        config.media_dir = args.media_dir
+    if args.root_dir:
+        config.root_dir = args.root_dir
     if args.llm_provider:
         config.llm_provider = LLMProvider.DEEPSEEK if args.llm_provider == "deepseek" else LLMProvider.DOUBAO
     if args.llm_api_key:
@@ -115,16 +115,16 @@ def main() -> None:
     config = build_config(args)
 
     # Print effective configuration.
-    media_dir = config.resolved_media_dir()
+    root_dir = config.resolved_root_dir()
     print("=" * 60)
     print(f"  PhyAnim Server")
     print(f"  LLM Provider : {config.llm_provider.value}")
     print(f"  LLM Model    : {config.resolved_model()}")
     print(f"  TTS Enabled  : {config.tts.enabled}")
-    print(f"  Media Dir    : {media_dir}")
+    print(f"  Root Dir    : {root_dir}")
     print(f"  Code Dir     : {config.resolved_code_dir()}")
     print(f"  Source Code Dir : {config.resolved_source_code_dir()}")
-    print(f"  Manim Media  : {config.resolved_manim_media_dir()}")
+    print(f"  Manim Media  : {config.resolved_media_dir()}")
     print(f"  Listen       : {args.host}:{args.port}")
     print("=" * 60)
 
@@ -136,4 +136,4 @@ if __name__ == "__main__":
     main()
 
 
-# python server.py --media_dir "E:\media_base" --llm_provider "deepseek" --llm_api_key "sk-f8c6f711dfa4485f890eec5f69b49c20" --llm_model "deepseek-v4-pro" --llm_base_url "https://api.deepseek.com" --tts_provider "minimax" --tts_api_key "sk-api-3Zu_GYQdFjIoXCXFHGLwcjXL7sUOQGSiAAmbTns5cLpa36Xk9-F1fdezpn9hAwWEDFiLFlsMnavkbh-_GL5oJHOd8zhmtbIgm7dcNhi2keybZ5OtJ0XAOF4"
+# python server.py --root_dir "E:\media_base" --llm_provider "deepseek" --llm_api_key "sk-f8c6f711dfa4485f890eec5f69b49c20" --llm_model "deepseek-v4-pro" --llm_base_url "https://api.deepseek.com" --tts_provider "minimax" --tts_api_key "sk-api-3Zu_GYQdFjIoXCXFHGLwcjXL7sUOQGSiAAmbTns5cLpa36Xk9-F1fdezpn9hAwWEDFiLFlsMnavkbh-_GL5oJHOd8zhmtbIgm7dcNhi2keybZ5OtJ0XAOF4"

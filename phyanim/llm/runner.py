@@ -15,15 +15,15 @@ from pathlib import Path
 
 def prepare_render_script(
     code: str,
-    media_dir: str | Path | None = None,
+    root_dir: str | Path | None = None,
     script_name: str = "generated_animation.py",
-    output_dir: str | Path | None = None,
+    code_dir: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Write generated code and return its path and the manim media path."""
-    root = Path(media_dir).resolve() if media_dir else Path.cwd() / "media"
+    root = Path(root_dir).resolve() if root_dir else Path.cwd()
     root.mkdir(parents=True, exist_ok=True)
 
-    script_dir = Path(output_dir).resolve() if output_dir else root / "code"
+    script_dir = Path(code_dir).resolve() if code_dir else root / "code"
     script_dir.mkdir(parents=True, exist_ok=True)
     script_path = script_dir / script_name
     script_path.write_text(code, encoding="utf-8")
@@ -35,20 +35,37 @@ def prepare_render_script(
 # 保存生成的源文件
 def prepare_source_script(
     code: str,
-    media_dir: str | Path | None = None,
+    root_dir: str | Path | None = None,
     script_name: str = "generated_animation.py",
-    output_dir: str | Path | None = None,
+    source_code_dir: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Write generated code and return its path and the manim media path."""
-    root = Path(media_dir).resolve() if media_dir else Path.cwd() / "media"
+    root = Path(root_dir).resolve() if root_dir else Path.cwd()
     root.mkdir(parents=True, exist_ok=True)
 
-    script_dir = Path(output_dir).resolve() if output_dir else root / "source_code"
+    script_dir = Path(source_code_dir).resolve() if source_code_dir else root / "source_code"
     script_dir.mkdir(parents=True, exist_ok=True)
     script_path = script_dir / f"{script_name}"
     script_path.write_text(code, encoding="utf-8")
     
     return script_path
+
+def prepare_analysis_info(
+    analysis_info: str,
+    root_dir: str | Path | None = None,
+    script_name: str = "generated_animation.txt",
+    analysis_info_dir: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """Write generated code and return its path and the manim media path."""
+    root = Path(root_dir).resolve() if root_dir else Path.cwd()
+    root.mkdir(parents=True, exist_ok=True)
+
+    analysis_info_dir_ = Path(analysis_info_dir).resolve() if analysis_info_dir else root / "analysis_info"
+    analysis_info_dir_.mkdir(parents=True, exist_ok=True)
+    analysis_info_path = analysis_info_dir_ / f"{script_name}"
+    analysis_info_path.write_text(analysis_info, encoding="utf-8")
+    
+    return analysis_info_path
 
 
 def build_render_environment(manim_media: str | Path) -> dict[str, str]:
@@ -67,16 +84,16 @@ def build_render_environment(manim_media: str | Path) -> dict[str, str]:
 
 def start_render_process(
     code: str,
-    media_dir: str | Path | None = None,
+    root_dir: str | Path | None = None,
     script_name: str = "generated_animation.py",
-    output_dir: str | Path | None = None,
+    code_dir: str | Path | None = None,
 ) -> tuple[Path, subprocess.Popen[str]]:
     """Write generated code and start its renderer without waiting."""
     script_path, manim_media = prepare_render_script(
         code,
-        media_dir=media_dir,
+        root_dir=root_dir,
         script_name=script_name,
-        output_dir=output_dir,
+        code_dir=code_dir,
     )
     process = subprocess.Popen(
         [sys.executable, str(script_path)],
@@ -93,20 +110,20 @@ def start_render_process(
 
 def render_code(
     code: str,
-    media_dir: str | Path | None = None,
+    root_dir: str | Path | None = None,
     script_name: str = "generated_animation.py",
-    output_dir: str | Path | None = None,
+    code_dir: str | Path | None = None,
 ) -> Path:
     """Write *code* to a script and execute it to render a video.
 
-    All manim output goes under ``<media_dir>/media/``. The generated script
-    goes under ``<media_dir>/code/`` (or ``output_dir`` if supplied).
+    All manim output goes under ``<root_dir>/media/``. The generated script
+    goes under ``<root_dir>/code/`` (or ``code_dir`` if supplied).
     """
     script_path, process = start_render_process(
         code,
-        media_dir=media_dir,
+        root_dir=root_dir,
         script_name=script_name,
-        output_dir=output_dir,
+        code_dir=code_dir,
     )
     stdout, stderr = process.communicate()
     if process.returncode != 0:
@@ -121,6 +138,7 @@ def render_code(
 __all__ = [
     "build_render_environment",
     "prepare_render_script",
+    "prepare_analysis_info",
     "render_code",
     "start_render_process",
 ]

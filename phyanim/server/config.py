@@ -76,40 +76,46 @@ class ServerConfig:
     llm_model: str = ""
     llm_base_url: str = ""
     tts: TTSConfig = field(default_factory=lambda: TTSConfig(provider="none"))
-    media_dir: str = ""
+    root_dir: str = ""
     timeout_seconds: int = 300
 
-    def resolved_media_dir(self) -> Path:
-        """Return the absolute media directory, creating it if needed.
+    def resolved_root_dir(self) -> Path:
+        """Return the absolute root directory, creating it if needed.
 
         All generated files go here:
-        - media_dir/code/         — generated .py scripts
-        - media_dir/media/        — manim output (videos, tex, text, images, audio)
+        - root_dir/code/         — generated .py scripts
+        - root_dir/media/        — manim output (videos, tex, text, images, audio)
         """
-        d = Path(self.media_dir).resolve() if self.media_dir else Path.cwd() / "media"
+        d = Path(self.root_dir).resolve() if self.root_dir else Path.cwd()
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     def resolved_code_dir(self) -> Path:
-        """Directory for generated .py scripts (under media_dir/code/)."""
-        d = self.resolved_media_dir() / "code"
+        """Directory for generated .py scripts (under root_dir/code/)."""
+        d = self.resolved_root_dir() / "code"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     def resolved_source_code_dir(self) -> Path:
-        """Directory for source .py scripts (under media_dir/source_code/)."""
-        d = self.resolved_media_dir() / "source_code"
+        """Directory for source .py scripts (under root_dir/source_code/)."""
+        d = self.resolved_root_dir() / "source_code"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def resolved_manim_media_dir(self) -> Path:
-        """Directory for manim media output (under media_dir/media/).
+    def resolved_analysis_info_dir(self) -> Path:
+        """Directory for analysis info (under root_dir/analysis_info/)."""
+        d = self.resolved_root_dir() / "analysis_info"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def resolved_media_dir(self) -> Path:
+        """Directory for manim media output (under root_dir/media/).
 
         This is set as manim's ``config.media_dir`` so that ALL manim
         artifacts (videos, tex, text, images, partial movies, audio)
         go here instead of polluting the project directory.
         """
-        d = self.resolved_media_dir() / "media"
+        d = self.resolved_root_dir() / "media"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -180,5 +186,5 @@ class ServerConfig:
             llm_model=os.environ.get("PHYANIM_LLM_MODEL", ""),
             llm_base_url=os.environ.get("PHYANIM_LLM_BASE_URL", ""),
             tts=tts,
-            media_dir=os.environ.get("PHYANIM_MEDIA_DIR", ""),
+            root_dir=os.environ.get("PHYANIM_ROOT_DIR", ""),
         )

@@ -150,10 +150,12 @@ def create_app(config: ServerConfig) -> Flask:
 
         # 只获取源码，不获取注入后的代码
         code_path = manager.source_code_path(script_name)
+        analysis_info_path = manager.analysis_info_path(script_name)
         if code_path.is_file():
             return jsonify({
                 "script_name": script_name,
                 "code": code_path.read_text(encoding="utf-8"),
+                "analysis_info": analysis_info_path.read_text(encoding="utf-8"),
             })
         if job["status"] in _ACTIVE_STATUSES:
             return status_response(job)
@@ -170,7 +172,7 @@ def create_app(config: ServerConfig) -> Flask:
             "llm_provider": cfg.llm_provider.value,
             "llm_model": cfg.resolved_model(),
             "tts_enabled": cfg.tts.enabled,
-            "media_dir": str(cfg.resolved_media_dir()),
+            "root_dir": str(cfg.resolved_root_dir()),
         })
 
     return app

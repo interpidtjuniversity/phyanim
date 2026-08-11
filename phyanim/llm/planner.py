@@ -1,138 +1,11 @@
-"""Physics LLM planner: turns a problem description into executable Python code.
-
-Usage::
-
-    from phyanim.llm import LLMConfig, make_client, PhysicsLLMPlanner
-
-    config = LLMConfig(api_key="...", base_url="...", model="...")
-    planner = PhysicsLLMPlanner(make_client(config))
-    code = planner.plan("两个小球通过弹簧碰撞...")
-    # code is a string of executable Python that renders a manim video
-"""
-
 from __future__ import annotations
 
 import re
 from typing import Any
 
-from phyanim.llm.client import LLMClient
-from phyanim.llm.prompt_builder import build_system_prompt
+from phyanim.llm.prompt_builder import build_analysis_system_prompt
 
-
-SYSTEM_PROMPT = build_system_prompt()
-
-
-class PhysicsLLMPlanner:
-    """Converts a problem description into executable PhyAnim Python code.
-
-    The LLM outputs raw Python source code (not JSON DSL).  The planner
-    extracts the code from the model's response, validates that it parses
-    as Python, and does one self-repair round-trip if it doesn't.
-    """
-
-    def __init__(self, client: LLMClient, tts_config: dict | None = None, media_dir: str | None = None) -> None:
-        self.client = client
-        self.tts_config = tts_config or {}
-        self.media_dir = media_dir
-
-    def plan(
-        self,
-        problem_text: str,
-        history_messages: list[Any],
-        *,
-        options: list[str] | None = None,
-        images: list[str] | None = None,
-        analysis: str | None = None,
-        extra: str | None = None,
-        scene_name: str | None = None,
-    ) -> str:
-        """Generate executable Python code from a problem description.
-
-        Parameters
-        ----------
-        problem_text:
-            The problem statement.
-        options:
-            Optional multiple-choice options.
-        images:
-            Optional list of image file paths or data URLs (for vision models).
-        analysis:
-            Optional reference answer / explanation.
-        extra:
-            Optional additional context (known constants, hints, etc.).
-        scene_name:
-            Optional name for the generated Scene class.  When given, the
-            LLM-generated class name is replaced so manim's output video
-            file carries this name (e.g. ``scene_name="Scene_20260701_161030"``
-            produces ``Scene_20260701_161030.mp4``).
-
-        Returns
-        -------
-        str
-            A string of executable Python source code with TTS_CONFIG injected.
-        """
-        system_prompt = SYSTEM_PROMPT
-        user_prompt = self._build_user_prompt(
-            problem_text, options=options, analysis=analysis, extra=extra
-        )
-        raw_response = self.client.complete_text(
-            system_prompt, user_prompt, history_messages, images=images
-        )
-        source_code = _extract_code(raw_response)
-        try:
-            _validate_python(source_code)
-        except CodeValidationError as exc:
-            # One self-repair round-trip feeding the error back to the model.
-            repair_prompt = (
-                f"{user_prompt}\n\n"
-                f"你上一次输出的代码没有通过校验，错误是：{exc}\n"
-                "请重新输出完整的 Python 代码。必须修复该错误，不要解释。"
-            )
-            raw_response = self.client.complete_text(
-                system_prompt, repair_prompt, history_messages, images=images
-            )
-            source_code = _extract_code(raw_response)
-            _validate_python(source_code)
-        # Inject TTS_CONFIG into the generated code.
-        code = _inject_tts_config(source_code, self.tts_config)
-        # Inject media_dir setting so all manim output stays in the specified directory.
-        if self.media_dir:
-            code = _inject_media_dir(code, self.media_dir)
-        # Force headless mode so errors don't hang on preview windows or dialogs.
-        code = _inject_headless_config(code)
-        # Force immediate exit on unhandled exceptions (Manim leaves non-daemon
-        # writer threads running otherwise).
-        code = _inject_force_exit_hook(code)
-        # Rename Scene class if requested (affects manim output filename).
-        if scene_name:
-            code = _rename_scene_class(code, scene_name)
-        return source_code, code
-
-    def _build_user_prompt(
-        self,
-        problem_text: str,
-        *,
-        options: list[str] | None,
-        analysis: str | None,
-        extra: str | None,
-    ) -> str:
-        sections: list[str] = []
-        sections.append("题目：\n" + problem_text.strip())
-        if options:
-            lines = "\n".join(
-                f"{chr(65 + i)}. {opt}" for i, opt in enumerate(options)
-            )
-            sections.append("选项：\n" + lines)
-        if analysis:
-            sections.append("答案解析：\n" + analysis.strip())
-        if extra:
-            sections.append("额外信息：\n" + extra.strip())
-        sections.append(
-            "请根据以上信息生成 PhyAnim Python 动画代码。"
-            "先用广义坐标把约束约化为无约束 ODE，再选择合适的渲染模式。"
-        )
-        return "\n\n".join(sections)
-
+ANALYSIS_SYSTEM_PROMPT = build_analysis_system_prompt()
 
 # ---------------------------------------------------------------------------
 # Code extraction and validation
@@ -217,10 +90,10 @@ def _inject_media_dir(code: str, media_dir: str) -> str:
     """
     # Normalize to absolute path string.
     from pathlib import Path
-    abs_media = str(Path(media_dir).resolve())
+    abs_media_dir = str(Path(media_dir).resolve())
     media_line = (
         "from manim import config as _manim_config; "
-        f"_manim_config.media_dir = {abs_media!r}"
+        f"_manim_config.media_dir = {abs_media_dir!r}"
     )
 
     lines = code.split("\n")
@@ -327,4 +200,4 @@ def _rename_scene_class(code: str, new_name: str) -> str:
     return code
 
 
-__all__ = ["PhysicsLLMPlanner", "SYSTEM_PROMPT", "CodeValidationError"]
+__all__ = ["ANALYSIS_SYSTEM_PROMPT", "CodeValidationError"]

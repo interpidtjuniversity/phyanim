@@ -10,7 +10,11 @@ dependencies = [
     "manim",
     "matplotlib",
     "flask",
-    "manim-voiceover"
+    "manim-voiceover",
+    "python-docx",
+    "langgraph",
+    "langchain-core",
+    "langchain-openai",
 ]
 
 [tool.setuptools.packages.find]

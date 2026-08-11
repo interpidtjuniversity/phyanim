@@ -15,8 +15,8 @@ from phyanim.llm.client import (
     OpenAICompatibleClient,
     make_client,
 )
-from phyanim.llm.planner import PhysicsLLMPlanner, CodeValidationError
-from phyanim.llm.prompt_builder import build_system_prompt
+from phyanim.llm.planner import CodeValidationError
+from phyanim.llm.prompt_builder import build_code_generate_system_prompt
 from phyanim.llm.runner import render_code
 
 __all__ = [
@@ -26,8 +26,7 @@ __all__ = [
     "LLMClient",
     "LLMConfig",
     "OpenAICompatibleClient",
-    "PhysicsLLMPlanner",
-    "build_system_prompt",
+    "build_code_generate_system_prompt",
     "make_client",
     "render_code",
 ]

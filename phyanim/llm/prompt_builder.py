@@ -1,8 +1,8 @@
 """Modular prompt builder for the PhyAnim LLM planner.
 
 Assembles the system prompt from composable sections.  The LLM outputs
-executable Python code directly (no JSON DSL), choosing one of two
-render modes: code or hybrid (recommended).
+executable Python code directly (no JSON DSL), using the hybrid
+render mode (physics solver + custom rendering).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 # =========================================================================
 
 CORE_PRINCIPLES = """你是 PhyAnim 物理动画框架的代码生成器，同时也是一个物理建模专家、动画设计师。
-你的任务：把自然语言物理题目（可能附带图片、选项、答案解析）转换为可执行的 Python 代码（使用manim和以下相关API）。
+你的任务：把自然语言物理题目（可能附带图片、选项、答案解析）转换为可执行的 Python 代码（使用manim和以下相关API，manim版本为v0.18.1）。
 只输出一个完整的 Python 代码块（用 ```python 包裹），不要解释。
 
 ==================== 核心建模原则 ====================
@@ -49,8 +49,8 @@ DIRECTOR_PATTERNS = """==================== 导演模式库（可自由组合）
 
 --- 模式1：分段播放 + 暂停讲解 ---
   将物理动画分成多段，中间暂停做分析。tracker 停住时画面自然静止。
-
-  tracker = ValueTracker(0.0)
+  t_total = trajectory.total_time
+  tracker = create_tracker(0.0)
   # 段1：播放 0 → t1
   with self.voiceover(text="描述前半段运动...") as vo:
       self.play(tracker.animate.set_value(t1), run_time=max(vo.duration, t1), rate_func=linear)
@@ -71,7 +71,7 @@ DIRECTOR_PATTERNS = """==================== 导演模式库（可自由组合）
 
   # 段1：完整物理动画
   with self.voiceover(text="观察运动过程...") as vo:
-      self.play(tracker.animate.set_value(t_total), run_time=..., rate_func=linear)
+      self.play(tracker.animate.set_value(t_total), run_time=max(vo.duration, t_total), rate_func=linear)
 
   # 暂停：公式推导（物理动画暂停，展示公式）
   self.play(FadeOut(sim_elements), run_time=0.5)
@@ -81,31 +81,47 @@ DIRECTOR_PATTERNS = """==================== 导演模式库（可自由组合）
 
   # 回看：恢复物理动画（甚至可以反向播放验证）
   self.play(FadeIn(sim_elements), run_time=0.5)
+  ball.clear_updaters()
   with self.voiceover(text="回看运动，验证结论...") as vo:
       # 可以重新播放，或用不同速度/视角
-      tracker2 = ValueTracker(0.0)
+      tracker2 = create_tracker(0.0)
       attach_position_updater(ball, trajectory, "ball", tracker2)
-      self.play(tracker2.animate.set_value(t_total), run_time=vo.duration, rate_func=linear)
+      self.play(tracker2.animate.set_value(t_total), run_time=max(vo.duration, t_total), rate_func=linear)
 
 --- 模式3：关键时刻冻结 + 逐层标注 ---
   在物理过程的关键时刻（如碰撞瞬间、共速瞬间）冻结画面，逐层添加标注。
 
-  # 播放到关键时刻
-  with self.voiceover(text="运动到关键时刻...") as vo:
-      self.play(tracker.animate.set_value(t_key), run_time=..., rate_func=linear)
+  # 播放到关键时刻，获取到第一次到达最高点的时间，你需要判断
+  pk_times = trajectory.event_trigger_times("at_peak")
+  if not pk_times:
+      # 无峰值时的默认处理：直接全段播放
+      with self.voiceover(text="观察全段运动...") as vo:
+          self.play(tracker.animate.set_value(t_total), run_time=vo.duration, rate_func=linear)
+  else:
+      start_t = 0.0
+      for i, t_key in enumerate(pk_times):
+          # 1. 从 start_t 运动到关键时刻 t_key
+          with self.voiceover(text=f"运动到第{i+1}次最高点") as vo:
+              self.play(tracker.animate.set_value(t_key), 
+                        run_time=max(vo.duration, t_key - start_t), rate_func=linear)
 
-  # 冻结：逐层添加分析
-  with self.voiceover(text="冻结分析第一层...") as vo1:
-      self.play(Write(velocity_arrow), run_time=0.5)
-      self.wait(max(0.1, vo1.duration - 0.5))
-  with self.voiceover(text="第二层分析...") as vo2:
-      self.play(Write(force_arrow), run_time=0.5)
-      self.wait(max(0.1, vo2.duration - 0.5))
+          # 2. 在关键时刻冻结，逐层添加标注
+          with self.voiceover(text="冻结分析第一层...") as vo1:
+              self.play(Write(velocity_arrow), run_time=0.5)
+              self.wait(max(0.1, vo1.duration - 0.5))
+          with self.voiceover(text="第二层分析...") as vo2:
+              self.play(Write(force_arrow), run_time=0.5)
+              self.wait(max(0.1, vo2.duration - 0.5))
 
-  # 解冻继续
-  with self.voiceover(text="继续运动...") as vo:
-      self.play(FadeOut(velocity_arrow, force_arrow), run_time=0.3)
-      self.play(tracker.animate.set_value(t_total), run_time=..., rate_func=linear)
+          # 3. 清空标注，准备进入下一段（或进入最后一段继续运动）
+          self.play(FadeOut(velocity_arrow, force_arrow), run_time=0.3)
+          start_t = t_key   # 更新下一段的起点
+
+      # 4. 所有关键时刻处理完后，如果还有剩余运动，则继续播完
+      if start_t < t_total:
+          with self.voiceover(text="继续后续运动...") as vo:
+              self.play(tracker.animate.set_value(t_total), 
+                        run_time=max(vo.duration, t_total - start_t), rate_func=linear)
 
 --- 模式4：对比展示 ---
   同一画面展示两种情况（如有/无摩擦、不同初速度），用不同颜色区分。
@@ -175,7 +191,10 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
       self.play(FadeOut(block2), run_time=0.3)
 
       # 最终结论（保留并高亮）
-      conclusion = MathTex(r"M = \frac{6}{19} \approx 0.316\,\text{kg}", font_size=32, color=GOLD_C)
+      conclusion = VGroup(
+          MathTex(r"M=\frac{6}{19}\approx0.316", font_size=32, color=GOLD_C),
+          Text("kg", font_size=26, color=GOLD_C),
+      ).arrange(RIGHT, buff=0.12)
       conclusion.to_edge(LEFT, buff=1.0)
       self.play(Write(conclusion), run_time=1.0)
       self.play(SurroundingRectangle(conclusion, color=GOLD_C))
@@ -186,7 +205,7 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
   模式A — 物理动画比语音短：
     将物理动画分 2~3 段播放，中间暂停做受力分析/公式推导，然后继续：
 
-      tracker = ValueTracker(0.0)
+      tracker = create_tracker(0.0)
       # 第一段：播放前半段物理动画
       with self.voiceover(text="滑块减速，木板加速。") as vo1:
           self.play(tracker.animate.set_value(t_total/2),
@@ -194,10 +213,12 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
 
       # 暂停：插入受力分析（tracker 不变，画面静止）
       with self.voiceover(text="此时滑块受向左摩擦力，木板受向右摩擦力。") as vo2:
-          arrows = self._create_force_arrows(...)  # 创建受力箭头
-          self.play(FadeIn(arrows), run_time=0.5)
+          block_center = block.get_center()
+          # 或者使用trajectory获取轨迹数据然后自行拼接向量箭头
+          f_arrow = Arrow(block_center, block_center + LEFT * 0.8, color=RED, buff=0.1, stroke_width=5)
+          self.play(FadeIn(f_arrow), run_time=0.5)
           self.wait(max(0.1, vo2.duration - 0.5))
-          self.play(FadeOut(arrows), run_time=0.3)
+          self.play(FadeOut(f_arrow), run_time=0.3)
 
       # 第二段：播放剩余物理动画
       with self.voiceover(text="继续运动，直到共速。") as vo3:
@@ -216,7 +237,7 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
 
 --- 4. 相机与画面布局 ---
   - 默认画面约 14×8 单位。物体运动范围超出时必须调整相机。
-  - code/hybrid 模式：self.camera.frame_width = W; self.camera.frame_center = np.array([cx, cy, 0])
+  - hybrid 模式：self.camera.frame_width = W; self.camera.frame_center = np.array([cx, cy, 0])
   - 公式推导阶段可以把相机移到公式区域，仿真阶段移回物理区域
   - 用 self.safe_layout(obj) 自动缩放过大元素
 
@@ -235,7 +256,7 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
   - 无过渡：直接 self.add/self.remove → 用 FadeIn/FadeOut/Create 过渡
   - 箭头零长度：速度为0时 Arrow 崩溃 → 检查 abs(v) > 0.01 再设置
   - wait(0)：manim 不接受 → 用 max(0.1, duration)
-  - 使用manim中的API但是忘记了ipmport：import时为了避免报错统一使用 from manim import *
+  - 使用 manim 中的 API 但忘记 import：统一使用 from manim import * 避免遗漏导入
   - MathTex渲染错误：MathTex 只存放纯数学公式，严禁使用\\text{}；公式附带的单位、文字采用VGroup组合MathTex与Text拼接（确保贴合合适不能间距太远也不能太近导致重叠），隔离LaTeX文本字体切换逻辑，保障 Windows/Linux 跨平台稳定渲染。
   - 物理段缺失end_event结束事件：一个物理段必须定义段结束事件。
 """
@@ -245,24 +266,12 @@ QUALITY_GUIDE = """==================== 动画质量指南（务必遵守）====
 # Render mode selection guide
 # =========================================================================
 
-MODE_SELECTION_GUIDE = """==================== 渲染模式选择 ====================
-
-你必须在代码中选择一种渲染模式。两种模式共享同一套物理建模 API，区别在于渲染方式：
-
-1. hybrid 模式（推荐）：
+MODE_SELECTION_GUIDE = """==================== 渲染模式 ====================
+使用 hybrid 模式（唯一支持的模式）：
    声明物理方程 → solver 求解产生 TrajectoryData → 你写渲染代码消费 trajectory。
-   适合精确物理 + 自定义渲染。solver 保证物理精度，你只控制视觉效果。
+   solver 保证物理精度，你只控制视觉效果。
    入口：PhyAnimScene + solve_animation
-   绝大多数物理题目都应该使用此模式。
-
-2. code 模式：
-   你直接写 manim construct 方法体。物理求解需自行实现（如手写 RK4）。
-   适合需要完全自定义视觉、且物理简单的场景。
-   入口：PhyAnimScene
-
-选择建议：
-- 默认使用 hybrid 模式
-- 仅当物理非常简单（如匀速直线运动）且需要极简代码时才用 code 模式
+   所有物理题目都使用此模式。
 """
 
 
@@ -294,7 +303,12 @@ ENGINE_API = """==================== Engine支持先对物理动画进行求解 
   # 每个对象的state_variables中的值不能与其它对象的state_variables中的值重复。
   obj = PhysicObject2D(
       object_id="ball",
-      state_variables={"x": StateVariable("x", "m", "水平位置"), "y": StateVariable("y", "m", "垂直位置")},
+      state_variables={
+          "x": StateVariable("x", "m", "水平位置"),
+          "y": StateVariable("y", "m", "垂直位置"),
+          "vx": StateVariable("vx", "m/s", "水平速度"),
+          "vy": StateVariable("vy", "m/s", "垂直速度"),
+      },
       cartesian_position=[("x", "y")]
   )
   animation.add_object(obj, {"x": 0.0, "y": 5.0, "vx": 0.0, "vy": 0.0})
@@ -304,9 +318,9 @@ ENGINE_API = """==================== Engine支持先对物理动画进行求解 
   # segment_id：段的唯一标识符。
   # state_vector：定义物理状态的变量列表。每个变量对应一个状态变量，来自PhysicObject2D的state_variables。
   # equations：state_vector中定义变量的导数（重要）表达式。
-  # state_owners：state_vector中每个变量的所属对象的object_id。。
+  # state_owners：state_vector中每个变量的所属对象的object_id。
   # derived_equations：根据state_vector中的变量，派生出来的变量，如动能、相对位置等，直接给出它们的表达式。
-  # duration：暂时没有意义，所有物理段的运行时长取决于真实的物理模拟时长，duration尽量设置大一点的值。
+  # duration：段的最大持续时间上限。实际运行时长由 end_event 决定，建议设为较大值（如 100）。
   # end_event：段结束时触发的事件，定义事件名称和触发条件。direction=1表示正向触发（表达式由负变正），-1表示反向触发（表达式由正变负）。
   # transition：事件触发时的状态跃迁，定义状态变量的更新规则，如等质量弹性碰撞时速度交换。
   animation.add_segment(
@@ -351,70 +365,6 @@ ENGINE_API = """==================== Engine支持先对物理动画进行求解 
     peak_times = trajectory.event_trigger_times("at_peak")
 """
 
-# =========================================================================
-# Code mode API reference
-# =========================================================================
-
-CODE_API = """==================== Code 模式 API ====================
-
-导入：
-  from manim import *
-  from phyanim.voiceover import PhyAnimScene
-
-你的代码必须是一个继承 PhyAnimScene 的 Scene 子类，实现 construct 方法。
-PhyAnimScene 提供：
-  - 深色背景（BG_COLOR = "#1C2333"）
-  - setup_speech(tts_config) — 初始化TTS（无依赖时降级为no-op）
-  - voiceover(text) 上下文管理器 — 语音讲解与动画同步
-  - safe_layout(obj) — 自动缩放到适合屏幕
-
-相机控制（物体运动超出默认画面约14×8单位时必须设置）：
-  在 construct 方法开头调整 self.camera：
-    self.camera.frame_height = 12       # 画面高度
-    self.camera.frame_width = 20        # 画面宽度
-    self.camera.frame_center = np.array([0, 5, 0])  # 画面中心(x, y, z)
-  或者直接缩放物理量的单位，使运动范围适配默认画面。
-
-代码结构：
-  from manim import *
-  from phyanim.voiceover import PhyAnimScene
-
-  # TTS_CONFIG 由运行环境注入，直接使用即可
-
-  class GeneratedScene(PhyAnimScene):
-      def construct(self):
-          self.setup_speech(TTS_CONFIG)
-          # 你的 manim 代码...
-          ball = Circle(radius=0.15, color=YELLOW)
-          self.add(ball)
-          with self.voiceover(text="小球开始下落") as tracker:
-              self.play(ball.animate.shift(DOWN * 3), run_time=2.0)
-              self.wait(tracker.duration)
-
-  if __name__ == "__main__":
-      GeneratedScene().render()
-
-voiceover 用法：
-  with self.voiceover(text="讲解文本") as tracker:
-      self.play(animation, run_time=2.0)
-      self.wait(tracker.duration)  # 等待语音播完，无TTS时自动估算时长
-
-注意：
-  - 在这种模式中你需要自行实现物理求解（如手写 RK4 或用 scipy.integrate.solve_ivp）
-
-常见陷阱（务必避免）：
-  - Arrow 零长度崩溃：当速度为0时，Arrow 的 start==end 会导致 manim 崩溃。
-    使用 put_start_and_end_on 前必须检查长度，速度为0时隐藏箭头：
-      if abs(v) > 0.01:
-          arrow.put_start_and_end_on(start, start + direction * v * scale)
-          arrow.set_opacity(1)
-      else:
-          arrow.set_opacity(0)
-  - updater 中的 DivisionByZero：检查分母是否可能为零，加 epsilon 保护。
-  - wait(0) 崩溃：manim 不接受 wait(0)，使用 max(0.1, duration) 或条件判断。
-  - 对Line类型的对象更新位置时务必使用put_start_and_end_on。
-"""
-
 
 # =========================================================================
 # Hybrid mode API reference
@@ -450,7 +400,7 @@ hybrid 模式使用了高精度求解器（如 scipy.integrate.solve_ivp）进�
       def construct(self):
           self.setup_speech(TTS_CONFIG)
           animation = build_animation()
-          # 获取轨迹数据（核心）
+          # 获取轨迹数据（核心），后续任何动画的同步调节都需要严格参照从轨迹里求解出来的数据进行，比如箭头应该加在哪个位置，长度应该为多少等
           trajectory = solve_animation(animation)
           # 用 trajectory 数据驱动自定义渲染
           ball = Circle(radius=0.15, color=YELLOW)
@@ -460,8 +410,8 @@ hybrid 模式使用了高精度求解器（如 scipy.integrate.solve_ivp）进�
           self.add(ball)
           with self.voiceover(text="...") as vo:
               self.play(tracker.animate.set_value(trajectory.total_time),
-                        run_time=trajectory.total_time, rate_func=linear)
-              self.wait(vo.duration)
+                        run_time=max(vo.duration, trajectory.total_time),
+                        rate_func=linear)
 
   if __name__ == "__main__":
       GeneratedScene().render()
@@ -558,7 +508,6 @@ TrajectoryData API（hybrid 模式核心）：
     self.add(trail)
 
 注意：
-  - 物理方程用 engine 模式相同的 API 声明（PhysicObject2D, PhysicsSegment 等）
   - 物体运动超出默认画面约14×8单位时，在 construct 开头设置相机：
       self.camera.frame_height = 12
       self.camera.frame_width = 20
@@ -583,52 +532,12 @@ TTS_GUIDE = """==================== TTS 语音讲解 ====================
 
 使用方法：
   在代码中用 self.voiceover() 上下文管理器：
-  with self.voiceover(text="讲解文本") as tracker:
+  with self.voiceover(text="讲解文本") as vo:
       self.play(animation, run_time=2.0)
-      self.wait(tracker.duration)
+      self.wait(vo.duration)
 
 代码中直接引用 TTS_CONFIG 变量（已在环境中定义），例如：
   self.setup_speech(TTS_CONFIG)
-"""
-
-CODE_EXAMPLE = """==================== Code 模式完整示例 ====================
-
-```python
-from __future__ import annotations
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import numpy as np
-from manim import *
-from phyanim.voiceover import PhyAnimScene
-
-# TTS_CONFIG 由运行环境注入，直接使用即可
-
-class GeneratedScene(PhyAnimScene):
-    def construct(self):
-        self.setup_speech(TTS_CONFIG)
-
-        ball = Circle(radius=0.15, color=YELLOW)
-        ball.set_fill(YELLOW, opacity=1.0)
-        ball.move_to(UP * 2)
-        ground = Line(LEFT * 5 + DOWN * 2, RIGHT * 5 + DOWN * 2, color=GRAY)
-        self.add(ground, ball)
-
-        g = 9.8
-        t = ValueTracker(0.0)
-        ball.add_updater(lambda m: m.move_to(UP * 2 - DOWN * 0.5 * g * t.get_value() ** 2))
-
-        with self.voiceover(text="小球从高处自由下落，加速度为g。") as tracker:
-            self.play(t.animate.set_value(0.9), run_time=0.9, rate_func=linear)
-            self.wait(tracker.duration)
-
-        ball.clear_updaters()
-        self.wait(0.5)
-
-if __name__ == "__main__":
-    GeneratedScene().render()
-```
 """
 
 HYBRID_EXAMPLE = """==================== Hybrid 模式完整示例 ====================
@@ -643,8 +552,6 @@ import numpy as np
 from manim import *
 from phyanim.api import *
 from phyanim.voiceover import PhyAnimScene
-
-# TTS_CONFIG 由运行环境注入，直接使用即可
 
 def build_animation() -> PhysicsAnimation:
     animation = PhysicsAnimation(global_parameters={"g": 9.8}, engine="scipy", sample_dt=1/60)
@@ -668,6 +575,7 @@ def build_animation() -> PhysicsAnimation:
 
 class GeneratedScene(PhyAnimScene):
     def construct(self):
+        # TTS_CONFIG 由运行环境注入，直接使用即可
         self.setup_speech(TTS_CONFIG)
         animation = build_animation()
         trajectory = solve_animation(animation)
@@ -677,14 +585,10 @@ class GeneratedScene(PhyAnimScene):
         attach_position_updater(ball, trajectory, "ball", tracker)
         self.add(ball)
 
-        # 用 trajectory 数据验证
-        y_final = trajectory.value_at("y", trajectory.total_time)
-        print(f"Final y = {y_final:.4f}")
-
         with self.voiceover(text="小球自由下落两秒。") as vo:
             self.play(tracker.animate.set_value(trajectory.total_time),
-                      run_time=trajectory.total_time, rate_func=linear)
-            self.wait(vo.duration)
+                      run_time=max(vo.duration, trajectory.total_time),
+                      rate_func=linear)
 
 if __name__ == "__main__":
     GeneratedScene().render()
@@ -698,7 +602,7 @@ if __name__ == "__main__":
 
 GOLDEN_EXAMPLE = """==================== 黄金示例：凹槽轨道与动量守恒（学习此代码的设计思路）====================
 
-以下代码展示了高质量的物理教学动画设计。注意学习：
+以下代码展示了高质量的物理教学动画设计，仅供参考：
 1. 三段式叙事（介绍→仿真→推导）的自然过渡
 2. 物理动画分段播放，中间暂停做受力分析
 3. 公式逐行展示、结论高亮、排版不溢出
@@ -713,14 +617,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# TTS_CONFIG 由运行环境注入；直接运行时使用测试配置
 import os
 
 import numpy as np
 from manim import *
 from phyanim.api import *
 from phyanim.voiceover import PhyAnimScene
-from math import pi
 
 # --- 物理参数 ---
 R = 1       # 半圆半径
@@ -765,7 +667,7 @@ def build_animation() -> PhysicsAnimation:
         cartesian_position=[("x_track", "y_track")],
     )
 
-    animation.add_object(ball, {"theta": -pi / 2, "omega": 0.0})
+    animation.add_object(ball, {"theta": -PI / 2, "omega": 0.0})
     animation.add_object(track, {"x_track": 0.0, "y_track": 0.0})
 
     # 拉格朗日方程约化后的 ODE（无约束广义坐标）
@@ -798,7 +700,7 @@ def build_animation() -> PhysicsAnimation:
 
     return animation
 
-
+# 可以自定义几何体
 def create_track_geom():
     #构建内凹轨道几何体。
     track = VMobject()
@@ -846,24 +748,25 @@ class GoldenExampleScene(PhyAnimScene):
 
         self.play(FadeIn(title), Create(ground))
 
-        with self.voiceover(text="我们有一个质量为10千克的内凹轨道，放置在光滑水平面上。") as tracker:
+        with self.voiceover(text="我们有一个质量为10千克的内凹轨道，放置在光滑水平面上。") as vo:
             self.play(DrawBorderThenFill(track), Write(track_label))
-            self.wait(tracker.duration)
+            self.wait(vo.duration)
 
-        with self.voiceover(text="在轨道左侧最高点，放置一个质量为5千克的小球，由静止释放。") as tracker:
+        with self.voiceover(text="在轨道左侧最高点，放置一个质量为5千克的小球，由静止释放。") as vo:
             self.play(FadeIn(ball), Write(ball_label))
-            self.wait(tracker.duration)
+            self.wait(vo.duration)
 
         self.play(FadeOut(ball_label), FadeOut(title))
 
         # ==================== 阶段2：物理仿真（分段播放） ====================
         # 质心红线
-        center_line = DashedLine(UP * 1.5 + LEFT * (m_ball * R + M_track * 0) / (m_ball + M_track), DOWN * 3 + (m_ball * R + M_track * 0) / (m_ball + M_track) * LEFT, color=RED, stroke_width=2)
-        center_label = Text(f"系统水平质心 (x = {-(m_ball * R + M_track * 0) / (m_ball + M_track):.2f})", font="SimSun", font_size=16, color=RED)
+        x_cm = m_ball * R / (m_ball + M_track)
+        center_line = DashedLine(UP * 1.5 + LEFT * x_cm, DOWN * 3 + LEFT * x_cm, color=RED, stroke_width=2)
+        center_label = Text(f"系统水平质心 (x = {-x_cm:.2f})", font="SimSun", font_size=16, color=RED)
         center_label.next_to(center_line, UP, buff=0.1)
 
         # 时间驱动器
-        t_tracker = ValueTracker(0.0)
+        t_tracker = create_tracker(0.0)
 
         # 绑定物体位置到轨迹
         attach_position_updater(track, trajectory, "track", t_tracker)
@@ -872,21 +775,21 @@ class GoldenExampleScene(PhyAnimScene):
         # 轨道标签跟随
         track_label.add_updater(lambda mob: mob.move_to(track.get_center() + DOWN * 0.4))
 
-        with self.voiceover(text="由于水平面完全光滑，系统在水平方向不受外力，其水平质心始终保持静止。") as tracker:
+        with self.voiceover(text="由于水平面完全光滑，系统在水平方向不受外力，其水平质心始终保持静止。") as vo:
             self.play(Create(center_line), Write(center_label))
-            self.wait(tracker.duration)
+            self.wait(vo.duration)
 
         # --- 段1：播放前 6 秒物理动画 ---
-        with self.voiceover(text="现在释放小球，可以看到轨道在小球下落过程中会向右反冲运动。") as tracker:
+        with self.voiceover(text="现在释放小球，可以看到轨道在小球下落过程中会向右反冲运动。") as vo:
             t1 = min(6.0, t_total)
             self.play(
                 t_tracker.animate.set_value(t1),
-                run_time=max(tracker.duration, t1),
+                run_time=max(vo.duration, t1),
                 rate_func=linear,
             )
 
         # --- 暂停：受力分析 ---
-        with self.voiceover(text="此时小球受重力和轨道支持力，轨道受小球的反作用力水平向右。") as tracker:
+        with self.voiceover(text="此时小球受重力和轨道支持力，轨道受小球的反作用力水平向右。") as vo:
             ball_center = ball.get_center()
             # 重力箭头
             g_arrow = Arrow(ball_center, ball_center + DOWN * 0.8, color=RED, buff=0.1, stroke_width=5)
@@ -899,14 +802,14 @@ class GoldenExampleScene(PhyAnimScene):
             f_label = MathTex("f", color=BLUE, font_size=24).next_to(f_arrow, UP, buff=0.1)
 
             self.play(FadeIn(g_arrow, g_label, f_arrow, f_label), run_time=0.5)
-            self.wait(max(0.1, tracker.duration - 0.5))
+            self.wait(max(0.1, vo.duration - 0.5))
             self.play(FadeOut(g_arrow, g_label, f_arrow, f_label), run_time=0.3)
 
         # --- 段2：继续播放剩余物理动画 ---
-        with self.voiceover(text="小球在轨道内来回摆动，但系统质心始终不动。") as tracker:
+        with self.voiceover(text="小球在轨道内来回摆动，但系统质心始终不动。") as vo:
             self.play(
                 t_tracker.animate.set_value(t_total),
-                run_time=max(tracker.duration, t_total - 6.0),
+                run_time=max(vo.duration, t_total - 6.0),
                 rate_func=linear,
             )
 
@@ -938,24 +841,24 @@ class GoldenExampleScene(PhyAnimScene):
             formulas.scale_to_fit_height(6)
         formulas.to_edge(RIGHT, buff=1.0).shift(UP * 0.5)
 
-        with self.voiceover(text="在水平方向上，小球与轨道组成的系统动量始终守恒。") as tracker:
+        with self.voiceover(text="在水平方向上，小球与轨道组成的系统动量始终守恒。") as vo:
             self.play(Write(formulas[0]), run_time=1.0)
-            self.wait(max(0.1, tracker.duration - 1.0))
+            self.wait(max(0.1, vo.duration - 1.0))
 
-        with self.voiceover(text="将动量关系对时间积分，可得水平位移的守恒关系。") as tracker:
+        with self.voiceover(text="将动量关系对时间积分，可得水平位移的守恒关系。") as vo:
             self.play(Write(formulas[1]), run_time=1.0)
-            self.wait(max(0.1, tracker.duration - 1.0))
+            self.wait(max(0.1, vo.duration - 1.0))
 
-        with self.voiceover(text="轨道位移与小球水平位移比值恰好与质量比相反。") as tracker:
+        with self.voiceover(text="轨道位移与小球水平位移比值恰好与质量比相反。") as vo:
             self.play(Write(formulas[2]), run_time=1.0)
-            self.wait(max(0.1, tracker.duration - 1.0))
+            self.wait(max(0.1, vo.duration - 1.0))
 
-        with self.voiceover(text="轨道质量为10千克，小球为5千克，轨道位移为小球的一半，方向相反。") as tracker:
+        with self.voiceover(text="轨道质量为10千克，小球为5千克，轨道位移为小球的一半，方向相反。") as vo:
             formulas[3].set_color(CONCLUSION_COLOR)
             self.play(Write(formulas[3]), run_time=1.0)
             box = SurroundingRectangle(formulas[3], color=CONCLUSION_COLOR)
             self.play(Create(box), run_time=0.5)
-            self.wait(max(0.1, tracker.duration - 1.5))
+            self.wait(max(0.1, vo.duration - 1.5))
 
         self.wait(1.0)
 
@@ -971,54 +874,370 @@ if __name__ == "__main__":
 # Output requirements
 # =========================================================================
 
-OUTPUT_REQUIREMENTS = """==================== 输出要求 ====================
+ANALYSIS_REQUIREMENTS = """==================== 输出要求 ====================
 
-在输出代码之前，你必须先完成以下推理步骤（写在代码块之前的正文部分）：
+你是 PhyAnim 物理动画框架的物理分析师基于manim版本为v0.18.1。你的任务是对物理题目进行完整的物理建模分析和动画视觉规划，
+输出一份结构化的分析报告。这份报告将作为"渲染规格书"直接交给代码生成 agent 执行——
+因此每一个数值、每一个变量名、每一个 mobject 属性都必须明确无歧义，不能出现"适当""合适""大概"等模糊措辞。
 
-第一步 — 数学与物理推理：
-  - 列出题目中的已知量、未知量、约束条件。
-  - 用牛顿力学或拉格朗日力学推导运动方程。
-  - 如果有几何约束，说明如何约化为广义坐标的无约束 ODE。
-  - 如果有碰撞/突变，推导状态跃迁方程。
-  - 给出关键物理量的解析解或数值特征（如周期、聚焦距离等）。
+不要输出任何 Python 代码。用自然语言和结构化 Markdown 完成以下所有部分。
+每个部分必须逐一回答所有列出的问题，缺一不可。
 
-第二步 — 梳理动画结构：
-  - 是否需要多场景叙事？如果题目适合"介绍→仿真→分析"的分阶段展示，规划各场景内容。
-  - 需要创建哪些物理对象？各自的状态变量和参数是什么？
-  - 需要哪些连续物理段？每段的方程和结束事件是什么？
-  - 需要哪些背景/装饰元素（轨道、地面、斜面等）？
-  - 需要哪些标注（箭头、文本、公式推导）？
-  - 是否需要时间缩放（freeze/slow）？
-  - 是否需要语音讲解？讲解内容是什么？
+---
 
-第三步 — 选择渲染模式：
-  - 根据物理复杂度和视觉需求，选择 code / hybrid 模式。
-  - 说明选择理由。
+## 一、题目信息与物理情景
 
-第四步 — 调整动画的放缩与画面：
-  - 视频空间有限（默认画面约14×8单位），需要根据动画内容调整：
-    - 方案A：缩放物理量的单位，使运动范围适配默认画面。
-    - 方案B：调整相机画面（code/hybrid模式用 self.camera.frame_width / frame_center）。
-  - 必须确保运动过程中物体不会超出画面边界。
+### 1.1 题目概述
 
-第五步 — 设计叙事节奏：
-  - 规划"介绍→仿真→分析"三段式结构
-  - 规划物理动画的分段播放：哪几个时间点暂停？暂停时展示什么？
-  - 规划公式推导的排版：几行公式？放在画面什么位置？是否会溢出？
-  - 规划语音讲解的内容和时机：每段语音对应什么画面？
+用 2~3 句话描述物理情景：什么物体、在什么环境中、做什么运动、要求解什么。
 
-第六步 — 输出代码：
-  - 只输出一个完整的 Python 代码块，用 ```python 包裹。
-  - 代码必须可直接执行（python file.py 即可渲染出视频）。
-  - 文件开头必须有 sys.path.insert 以确保 phyanim 可导入。
-  - 所有标识符必须是合法 Python 标识符。
-  - 数值用 number，不要带单位字符串。
-  - 代码中直接引用 TTS_CONFIG 变量（由运行环境注入），不要自己定义。
-  - 如果题目附带图片，根据图片内容建模。
+### 1.2 已知量清单
+
+用表格列出所有已知量，每行一个：
+
+| 符号 | 数值 | 单位 | 物理含义 | 所属对象 |
+|------|------|------|---------|---------|
+| m | 5.0 | kg | 小球质量 | ball |
+| M | 10.0 | kg | 轨道质量 | track |
+| R | 1.0 | m | 圆弧半径 | track |
+| g | 9.8 | m/s² | 重力加速度 | 全局 |
+| ... | ... | ... | ... | ... |
+
+### 1.3 未知量与待求量
+
+用表格列出：
+
+| 符号 | 物理含义 | 求解方法 |
+|------|---------|---------|
+| Δx_M | 轨道水平位移 | 动量守恒 + 能量守恒联立 |
+| T | 运动周期 | 数值求解后读取 |
+| ... | ... | ... |
+
+### 1.4 约束条件
+
+逐条列出物理约束（不是渲染约束），每条说明约束类型和约化方式：
+- 几何约束（如"摆长固定 L=1m → 约化为角度坐标 theta"）。
+- 接触约束（如"小球始终在轨道内 → 由轨道几何保证，不需要额外方程"）。
+- 边界条件（如"初始时刻 theta=-pi/2, omega=0"）。
+- 守恒律（如"水平方向动量守恒 → 系统质心水平位置不变"）。
+
+### 1.5 附图描述
+
+如有图片，描述图中标注的：坐标轴方向、已知角度、标注尺寸、特殊标记等。
+
+---
+
+## 二、广义坐标与状态变量体系
+
+### 2.1 广义坐标选择
+
+逐一列出你选择的每个广义坐标，并说明选择理由：
+
+| 广义坐标名 | 物理含义 | 单位 | 取值范围 | 约束约化说明 |
+|-----------|---------|------|---------|-------------|
+| theta | 小球相对轨道最低点的角度 | rad | [-pi/2, pi/2] | 摆长固定 → 不用 x,y，用 theta 作为唯一位置自由度 |
+| omega | theta 的角速度 | rad/s | 无界 | theta 的时间导数 |
+| x_track | 轨道中心水平位置 | m | 无界 | 由动量守恒约束决定，作为独立状态变量 |
+| ... | ... | ... | ... | ... |
+
+### 2.2 全局参数清单
+
+列出 PhysicsAnimation 的 global_parameters 字典中的所有键值：
+
+| 参数名 | 数值 | 单位 | 用途说明 |
+|--------|------|------|---------|
+| g | 9.8 | m/s² | 重力加速度，在方程中引用 |
+| m | 5.0 | kg | 小球质量 |
+| M | 10.0 | kg | 轨道质量 |
+| R | 1.0 | m | 圆弧半径 |
+| ... | ... | ... | ... |
+
+### 2.3 物理对象与状态变量清单
+
+逐一列出每个 PhysicObject2D，包含完整的变量定义：
+
+**对象 1：ball**
+- object_id: "ball"
+- state_variables（该对象持有的状态变量）：
+
+| 变量名 | 单位 | 物理含义 | 初始值 |
+|--------|------|---------|--------|
+| theta | rad | 角度 | -pi/2 |
+| omega | rad/s | 角速度 | 0.0 |
+
+- cartesian_position: [("x_ball", "y_ball")]（引用 derived 变量名，见 2.4）
+- 说明：ball 对象本身不直接持有 x_ball/y_ball，这两个是 derived 变量。
+
+**对象 2：track**
+- object_id: "track"
+- state_variables：
+
+| 变量名 | 单位 | 物理含义 | 初始值 |
+|--------|------|---------|--------|
+| x_track | m | 轨道中心水平位置 | 0.0 |
+| y_track | m | 轨道中心垂直位置 | 0.0 |
+
+- cartesian_position: [("x_track", "y_track")]
+- 说明：track 直接使用状态变量作为笛卡尔坐标。
+
+（按此格式列出所有对象。注意：每个对象的 state_variables 中的变量名不能与其他对象重复。）
+
+### 2.4 派生变量清单（derived_variables）
+
+列出所有 derived_equations 中定义的派生变量。这些变量不是状态变量，但渲染层需要它们
+（如将广义坐标转换为笛卡尔渲染坐标）：
+
+| 派生变量名 | 表达式（SymPy 语法） | 物理含义 | 被谁使用 |
+|-----------|---------------------|---------|---------|
+| x_ball | x_track + R*sin(theta) | 小球水平渲染坐标 | ball 的 cartesian_position |
+| y_ball | R*(1 - cos(theta)) | 小球垂直渲染坐标 | ball 的 cartesian_position |
+| ... | ... | ... | ... |
+
+### 2.5 坐标转换方案（广义坐标 → 笛卡尔渲染坐标）
+
+对每个需要渲染的物理对象，明确说明其渲染坐标的来源：
+
+- ball 的渲染位置：(x_ball, y_ball)，其中 x_ball = x_track + R*sin(theta)，y_ball = R*(1-cos(theta))。
+  → 这些表达式在 derived_equations 中定义，ball 的 cartesian_position 引用派生变量名。
+- track 的渲染位置：(x_track, y_track)，直接使用状态变量。
+  → cartesian_position 引用状态变量名。
+- 如果有更多对象，逐一说明。
+
+关键要求：cartesian_position 中引用的变量名（无论是状态变量还是派生变量）必须在 state_variables 或 derived_equations 中有定义。
+
+---
+
+## 三、运动方程与物理段划分
+
+### 3.1 运动方程推导
+
+说明方程推导过程（用自然语言，不是代码）：
+- 使用什么方法：牛顿第二定律 / 拉格朗日方程 / 动量守恒 / 能量守恒。
+- 推导的关键步骤（2~4步）。
+- 最终得到的 ODE 方程组。
+
+### 3.2 物理段清单
+
+逐一列出每个物理段（PhysicsSegment），包含完整信息：
+
+**段 1：swing**
+- segment_id: "swing"
+- 物理含义：小球在轨道内来回摆动，轨道在水平面上反冲。
+- object_ids: ["ball", "track"]
+- state_vector: ["theta", "omega", "x_track", "y_track"]
+- equations（每个状态变量的导数表达式）：
+
+| 状态变量 | 导数表达式（SymPy 语法字符串） |
+|---------|-----------------------------|
+| theta | omega |
+| omega | -(m*omega**2*sin(theta)*cos(theta) + g*(M+m)*sin(theta)/R) / (M + m*sin(theta)**2) |
+| x_track | -m*R*cos(theta)*omega/(M+m) |
+| y_track | 0 |
+
+- state_owners: {"theta": "ball", "omega": "ball", "x_track": "track", "y_track": "track"}
+- derived_equations: {"x_ball": "x_track + R*sin(theta)", "y_ball": "R*(1 - cos(theta))"}
+- duration: 100（设为足够大的上限）
+- end_event: time_countdown_event(15)（或自定义事件）
+- transition: 无（本段无状态突变）
+
+（如果有多个段，按此格式逐一列出。每个段必须有 end_event。）
+
+### 3.3 状态突变与跃迁方程
+
+如果物理过程存在碰撞、反弹等状态突变，逐一说明：
+- 突变发生在哪个段的 end_event。
+- transition 跃迁方程：哪个变量变成什么表达式。
+- 跃迁基于事件发生前的同一状态快照计算。
+
+例如：
+- 碰撞跃迁（等质量弹性碰撞）：{"vx1": "vx2", "vx2": "vx1"}
+- 反弹跃迁：{"vy": "-e*vy"}（e 为恢复系数）
+
+如果没有突变，明确写"无状态突变"。
+
+### 3.4 关键物理量与数值估算
+
+列出需要关注的物理量及其估算值：
+- 运动总时间 t_total ≈ ? 秒（给出估算方法）。
+- 运动范围：x ∈ [?, ?], y ∈ [?, ?]（用于后续画面布局）。
+- 周期、极值、临界条件等（如果有解析解给出公式，否则给出数值估算）。
+- 事件触发时间（如碰撞时间、到达最高点时间等）。
+
+---
+
+## 四、视觉对象清单
+
+### 4.1 物理对象 mobject 清单
+
+逐一列出每个跟随物理运动的对象的 mobject 规格：
+
+| 对象名 | mobject 类型 | 创建参数 | 初始坐标 | 绑定方式 | 绑定参数 |
+|--------|------------|---------|---------|---------|---------|
+| ball | Circle | radius=0.15, color=YELLOW, fill_opacity=1.0 | (x_ball_init, y_ball_init, 0) | attach_position_updater | trajectory, "ball", tracker |
+| track | VMobject(自定义路径) | fill=MAIN_COLOR opacity=0.6, stroke=STROKE_COLOR width=3 | (0, 0, 0) | attach_position_updater | trajectory, "track", tracker |
+| ... | ... | ... | ... | ... | ... |
+
+创建参数要求：
+- Circle: 必须给出 radius（建议 0.1~0.25）、color、fill_opacity。
+- Rectangle: 必须给出 width、height、color、fill_opacity。
+- Line/DashedLine: 必须给出 start、end、color、stroke_width。
+- VMobject 自定义路径: 必须给出 fill color+opacity、stroke color+width。
+- 所有颜色使用 manim 颜色常量（如 YELLOW, RED, BLUE_E, TEAL_C）。
+
+### 4.2 箭头与向量清单
+
+逐一列出所有箭头/向量（Arrow、DoubleArrow、DashedLine），每个必须给出完整规格：
+
+| 箭头名 | mobject 类型 | 颜色 | stroke_width | 绑定方式 | start_point_names | end_point_names 或 dir_vector_names | 出现时机 | 消失时机 | 零值保护策略 |
+|--------|------------|------|-------------|---------|-------------------|--------------------------------------|---------|---------|-------------|
+| g_arrow | Arrow | RED | 5 | attach_line | ["ball_x", "ball_y"] | dir_vector_names: ["0", "-1"] | 节拍3暂停时 FadeIn | 节拍4继续前 FadeOut | 无（重力恒不为零） |
+| v_arrow | Arrow | GREEN | 4 | attach_line | ["ball_x", "ball_y"] | dir_vector_names: ["ball_vx", "ball_vy"] | 节拍2仿真中 | 节拍3暂停前 FadeOut | abs(v)<0.01 时不显示 |
+| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+
+箭头规格要求：
+- stroke_width: 力箭头建议 5~6，速度箭头建议 3~4，辅助线建议 2。
+- buff: 起点偏移量，默认 0.1，避免箭头被物体遮挡。
+- 颜色区分：重力用 RED，支持力/法向力用 BLUE，摩擦力用 ORANGE，速度用 GREEN。
+- 零值保护：凡箭头长度可能为零的，必须说明保护策略（如"abs(v) < 0.01 时不创建"或"用 max(0.01, abs(v)) 代替"）。
+
+### 4.3 文本标签清单
+
+逐一列出所有 Text / MathTex 标签：
+
+| 标签名 | 类型 | 内容 | font_size | 颜色 | 定位方式 | 是否跟随移动 | 出现/消失时机 |
+|--------|------|------|-----------|------|---------|-------------|-------------|
+| title | Text | "凹槽轨道与动量守恒" | 32 | GOLD_C | to_edge(UP, buff=0.5) | 否 | 节拍1 FadeIn / 节拍2前 FadeOut |
+| ball_label | Text | "m = 5 kg" | 18 | WHITE | next_to(ball, UP, buff=0.15) | 是（add_updater 跟随 ball） | 节拍1 FadeIn / 节拍2前 FadeOut |
+| mg_label | MathTex | "mg" | 24 | RED | next_to(g_arrow, RIGHT, buff=0.1) | 否（暂停时静态） | 节拍3 FadeIn / 节拍3末 FadeOut |
+| ... | ... | ... | ... | ... | ... | ... | ... |
+
+标签规格要求：
+- font_size: 标题 28~36，普通标签 18~24，公式标签 24~28，结论公式 30~36。
+- 颜色: 标签颜色应与所标注的箭头/对象颜色一致。
+- 跟随移动的标签需要用 add_updater 绑定到对应 mobject 的位置。
+- MathTex 中严禁使用 \\\\text{}，文字部分用 Text 单独创建后 VGroup 组合。
+
+### 4.4 公式推导块清单
+
+逐一列出公式推导的每一块（block），每块 1~3 行：
+
+| 块号 | LaTeX 内容 | 位置指令 | 展示节拍 | 消失节拍 | 是否高亮 | 备注 |
+|------|-----------|---------|---------|---------|---------|------|
+| block1 | r"mv = (m+M)v_c" | to_edge(LEFT, buff=1.0).shift(UP*1.5) | 节拍5 Write | 节拍5末 FadeOut | 否 | font_size=28 |
+| block2 | r"\\frac{1}{2}mv^2 = \\frac{1}{2}(m+M)v_c^2 + \\mu mgL" | to_edge(LEFT, buff=1.0).shift(UP*1.5) | 节拍6 Write | 节拍6末 FadeOut | 否 | font_size=28 |
+| block3 (结论) | r"\\Delta x_M = -0.5 \\Delta x_m" | to_edge(LEFT, buff=1.0) | 节拍7 Write | 保留到结束 | 是：color=GOLD_C + SurroundingRectangle | font_size=32 |
+| ... | ... | ... | ... | ... | ... | ... |
+
+公式排版要求：
+- 同一时刻画面最多保留 3~4 行公式，超出则分块。
+- 每块展示后讲解，然后 FadeOut 消失，再展示下一块。
+- 行间距 buff >= 0.4。
+- 结论公式保留到动画结束，用 GOLD_C 高亮 + SurroundingRectangle。
+- 公式总高度不得超出画面（6 单位），超出则 scale_to_fit_height(6) 或减少每块行数。
+- 公式区域与物理动画区域分开（如公式在 LEFT 侧，物理在 RIGHT 侧）。
+
+### 4.5 背景与静态元素清单
+
+逐一列出所有不跟随物理运动的静态元素：
+
+| 元素名 | mobject 类型 | 创建参数 | 位置 | 出现时机 | 消失时机 |
+|--------|------------|---------|------|---------|---------|
+| ground | Line | start=LEFT*6+DOWN*H/2, end=RIGHT*6+DOWN*H/2, color=GRAY, stroke_width=4 | 固定 | 节拍1 Create | 保留到结束 |
+| center_line | DashedLine | start=UP*1.5+LEFT*x_cm, end=DOWN*3+LEFT*x_cm, color=RED, stroke_width=2 | 固定 | 节拍2 Create | 保留到推导阶段 FadeOut |
+| ... | ... | ... | ... | ... | ... |
+
+---
+
+## 五、画面布局与配色
+
+### 5.1 运动范围估算
+
+根据 3.4 节的物理量估算，明确物体运动的最大画面范围：
+- x 范围：[最小值, 最大值]（如 [-3.5, 3.5]）。
+- y 范围：[最小值, 最大值]（如 [-1.0, 2.0]）。
+- 总运动范围宽度 × 高度 = ? × ? 单位。
+
+### 5.2 画面方案
+
+选择方案并给出具体参数：
+- 方案A（缩放物理量）：运动范围略超默认画面（14×8），缩放物理量的渲染比例。
+  → 给出缩放因子（如"所有渲染坐标乘以 0.8"）。
+- 方案B（调整相机）：运动范围远超默认画面，调整相机参数。
+  → 给出具体值：frame_width=?, frame_height=?, frame_center=np.array([?, ?, 0])。
+- 如果运动范围在默认画面内，写"使用默认画面，无需调整"。
+
+### 5.3 配色方案
+
+用表格列出完整配色：
+
+| 用途 | 颜色常量 | 十六进制值 |
+|------|---------|-----------|
+| 背景色 | BLUE_E | #1C2333 |
+| 主物体色（ball） | YELLOW | #FFFF00 |
+| 辅助物体色（track） | PURPLE_B | #B08CFF |
+| 轨道描边色 | TEAL_C | #44CCDD |
+| 公式色 | WHITE | #FFFFFF |
+| 结论高亮色 | GOLD_C | #FFD700 |
+| 地面/辅助线色 | GRAY | #888888 |
+| ... | ... | ... |
+
+### 5.4 各阶段画面分区
+
+说明每个叙事阶段的画面布局：
+- 介绍阶段：标题在顶部，场景在中央。
+- 仿真阶段：物理动画占据画面主要区域，标注箭头叠加在物体上。
+- 分析阶段：物理动画移到画面一侧（如 LEFT*3.5），公式推导在另一侧。
+- 各阶段过渡：哪些元素需要 move_to / FadeOut / FadeIn。
+
+---
+
+## 六、叙事节拍表
+
+用 Markdown 表格列出完整的叙事节拍（通常 5~12 个节拍）：
+
+| 节拍# | 阶段 | tracker 范围 | 语音内容（完整中文） | 画面动作（具体 manim 操作） | 新增视觉元素 | 移除视觉元素 |
+|--------|------|-------------|---------------------|---------------------------|-------------|-------------|
+| 1 | 介绍 | — | "我们有一个质量为10千克的内凹轨道，放置在光滑水平面上。" | FadeIn(title), Create(ground), DrawBorderThenFill(track), Write(track_label) | title, ground, track, track_label | — |
+| 2 | 介绍 | — | "在轨道左侧最高点，放置一个质量为5千克的小球，由静止释放。" | FadeIn(ball), Write(ball_label) | ball, ball_label | — |
+| 3 | 仿真 | 0→6.0 | "释放小球，轨道在小球下落过程中向右反冲。" | tracker.animate.set_value(6.0), rate_func=linear, run_time=max(vo.duration, 6.0) | — | ball_label, title |
+| 4 | 暂停 | 6.0 | "此时小球受重力和轨道支持力，轨道受反作用力。" | FadeIn(g_arrow, g_label, f_arrow, f_label), wait | g_arrow, g_label, f_arrow, f_label | — |
+| 5 | 仿真 | 6.0→t_total | "小球在轨道内来回摆动，系统质心始终不动。" | tracker.animate.set_value(t_total), FadeOut(箭头组) | — | g_arrow, g_label, f_arrow, f_label |
+| 6 | 分析 | — | "水平方向动量守恒。" | sim_group.animate.move_to(LEFT*3.5), Write(block1) | block1 | — |
+| 7 | 分析 | — | "积分得到位移关系。" | FadeOut(block1), Write(block2) | block2 | block1 |
+| 8 | 分析 | — | "代入质量比，轨道位移为小球的一半。" | FadeOut(block2), Write(block3), Create(box) | block3, box | block2 |
+| ... | ... | ... | ... | ... | ... | ... |
+
+节拍表填写要求：
+- "语音内容"必须写完整的具体中文讲解文本，不能用"..."占位。
+- "画面动作"必须写具体的 manim 操作（FadeIn / Write / Create / tracker.animate.set_value / move_to 等）。
+- "tracker 范围"：仿真阶段写物理时间区间（如 0→6.0），暂停阶段写固定值（如 6.0），介绍/分析阶段写"—"。
+- "新增视觉元素"和"移除视觉元素"列出本节拍中 FadeIn/FadeOut 的对象名称。
+- 每个语音块时长建议 3~15 秒，长讲解拆成多段。
+
+---
+
+## 七、自检清单
+
+在完成以上所有部分后，逐项检查并确认：
+
+1. [ ] 所有广义坐标的 ODE 方程组是无约束的（无约束力、无拉格朗日乘子、无代数约束）。
+2. [ ] 每个物理段都有明确的 end_event（time_countdown_event 或自定义零点穿越事件）。
+3. [ ] 每个对象的 cartesian_position 引用的变量名在 state_variables 或 derived_equations 中有定义。
+4. [ ] 不同对象的 state_variables 中的变量名没有重复。
+5. [ ] 所有几何参数（半径、宽度、高度、stroke_width）都给出了具体数值。
+6. [ ] 所有颜色都使用 manim 颜色常量（如 YELLOW, RED, BLUE_E）。
+7. [ ] 所有箭头的零值保护策略已说明。
+8. [ ] 公式推导分块展示，同一时刻画面最多 3~4 行公式。
+9. [ ] 结论公式有高亮方案（颜色 + SurroundingRectangle）。
+10. [ ] 运动范围估算已完成，画面方案（默认/缩放/调相机）已选择。
+11. [ ] 叙事节拍表的"语音内容"全部是具体中文文本，无占位符。
+12. [ ] 叙事节拍表的"画面动作"全部是具体 manim 操作，无占位符。
+13. [ ] 所有 font_size 值已给出（标题 28~36，标签 18~24，公式 24~32）。
+14. [ ] 所有 buff 值已给出（公式间距 >= 0.4，标签间距 0.1~0.2）。
 """
 
 
-def build_system_prompt() -> str:
+def build_code_generate_system_prompt() -> str:
     """Assemble the complete system prompt from modular sections."""
     return (
         CORE_PRINCIPLES
@@ -1031,19 +1250,20 @@ def build_system_prompt() -> str:
         + "\n"
         + ENGINE_API
         + "\n"
-        + CODE_API
-        + "\n"
         + HYBRID_API
         + "\n"
         + TTS_GUIDE
-        + "\n"
-        + CODE_EXAMPLE
         + "\n"
         + HYBRID_EXAMPLE
         + "\n"
         + GOLDEN_EXAMPLE
         + "\n"
-        + OUTPUT_REQUIREMENTS
+    )
+
+def build_analysis_system_prompt() -> str:
+    """Assemble the complete system prompt from modular sections."""
+    return (
+        ANALYSIS_REQUIREMENTS
     )
 
 
@@ -1053,12 +1273,10 @@ __all__ = [
     "QUALITY_GUIDE",
     "MODE_SELECTION_GUIDE",
     "ENGINE_API",
-    "CODE_API",
     "HYBRID_API",
     "TTS_GUIDE",
-    "CODE_EXAMPLE",
     "HYBRID_EXAMPLE",
     "GOLDEN_EXAMPLE",
     "OUTPUT_REQUIREMENTS",
-    "build_system_prompt",
+    "build_code_generate_system_prompt",
 ]

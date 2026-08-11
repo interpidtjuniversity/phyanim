@@ -13,16 +13,18 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from phyanim.llm.planner import CodeValidationError, PhysicsLLMPlanner
-from phyanim.llm.runner import start_render_process
+from phyanim.llm.planner import CodeValidationError
 from phyanim.server.config import ServerConfig
 
-from phyanim.llm.runner import prepare_source_script
+from phyanim.llm.runner import prepare_source_script, prepare_analysis_info
 
 logger = logging.getLogger(__name__)
 
 _ACTIVE_STATUSES = frozenset({"queued", "generating", "rendering"})
 _SCRIPT_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+
+# Maximum repair attempts on render failure.
+_MAX_RENDER_RETRIES = 3
 
 
 def is_valid_script_name(script_name: object) -> bool:
@@ -41,10 +43,11 @@ class RenderJobManager:
 
     def __init__(self, config: ServerConfig) -> None:
         self.config = config
-        self.root_dir = config.resolved_media_dir()
+        self.root_dir = config.resolved_root_dir()
         self.code_dir = config.resolved_code_dir()
         self.source_code_dir = config.resolved_source_code_dir()
-        self.manim_media_dir = config.resolved_manim_media_dir()
+        self.analysis_info_dir = config.resolved_analysis_info_dir()
+        self.media_dir = config.resolved_media_dir()
         self.jobs_dir = self.root_dir / "jobs"
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
@@ -83,9 +86,12 @@ class RenderJobManager:
     def source_code_path(self, script_name: str) -> Path:
         return self.source_code_dir / f"{script_name}.py"
 
+    def analysis_info_path(self, script_name: str) -> Path:
+        return self.analysis_info_dir / f"{script_name}.txt"
+
     def find_video(self, script_name: str) -> Path | None:
         """Find the exact completed video for a job."""
-        video_dir = self.manim_media_dir / "videos"
+        video_dir = self.media_dir / "videos"
         if not video_dir.exists():
             return None
         candidates = [
@@ -114,56 +120,71 @@ class RenderJobManager:
     ) -> None:
         try:
             self._update(script_name, status="generating")
-            client = self.config.make_llm_client()
-            planner = PhysicsLLMPlanner(
-                client,
+
+            # --- LangGraph workflow ---
+            from phyanim.llm.render_graph import build_render_workflow
+
+            workflow = build_render_workflow(
+                llm_config=self.config.to_llm_config(),
                 tts_config=self.config.to_tts_dict(),
-                media_dir=str(self.manim_media_dir),
+                root_dir=str(self.root_dir),
+                code_dir=str(self.code_dir),
+                media_dir=str(self.media_dir),
+                max_retries=_MAX_RENDER_RETRIES,
             )
-            logger.info("[%s] Generating code", script_name)
-            source_code, code = planner.plan(
-                prompt,
-                history_messages,
-                images=image_urls or None,
-                scene_name=script_name,
-            )
-            logger.info("[%s] Code generated (%d chars)", script_name, len(code))
-            
-            prepare_source_script(source_code, self.root_dir, f"{script_name}.py", self.source_code_dir)
 
-            script_path, process = start_render_process( 
-                code,
-                media_dir=self.root_dir,
-                script_name=f"{script_name}.py",
-                output_dir=self.code_dir,
-            )
-            self._update(
-                script_name,
-                status="rendering",
-                pid=process.pid,
-                script_path=str(script_path),
-            )
-            logger.info("[%s] Rendering with PID %s", script_name, process.pid)
-            stdout, stderr = process.communicate()
+            initial_state: dict[str, Any] = {
+                "prompt": prompt,
+                "history_messages": history_messages,
+                "image_urls": image_urls,
+                "scene_name": script_name,
+                "retry_count": 0,
+                "max_retries": _MAX_RENDER_RETRIES,
+            }
 
-            if process.returncode != 0:
-                details = self._render_failure_details(
-                    process.returncode, stdout, stderr
+            self._update(script_name, status="generating")
+            result = workflow.invoke(initial_state)
+
+            # Save the final source code.
+            source_code = result.get("source_code", "")
+            if source_code:
+                prepare_source_script(
+                    source_code,
+                    self.root_dir,
+                    f"{script_name}.py",
+                    self.source_code_dir,
                 )
-                raise RuntimeError(details)
+            analysis_info = result.get("analysis_info", "")
+            if analysis_info:
+                prepare_analysis_info(
+                    analysis_info,
+                    self.root_dir,
+                    f"{script_name}.txt",
+                    self.analysis_info_dir,
+                )
 
-            video_path = self.find_video(script_name)
-            if video_path is None:
-                raise RuntimeError("Rendering exited successfully but produced no video")
+            # Check result.
+            if result.get("video_path") == "ok":
+                video_path = self.find_video(script_name)
+                if video_path is None:
+                    raise RuntimeError(
+                        "Rendering exited successfully but produced no video"
+                    )
+                self._update(
+                    script_name,
+                    status="succeeded",
+                    video_path=str(video_path),
+                    pid=None,
+                    error=None,
+                )
+                logger.info("[%s] Video ready: %s", script_name, video_path)
+            else:
+                error = result.get("error", "Unknown failure")
+                retry_count = result.get("retry_count", 0)
+                raise RuntimeError(
+                    f"{error}\n(After {retry_count} repair attempts)"
+                )
 
-            self._update(
-                script_name,
-                status="succeeded",
-                video_path=str(video_path),
-                pid=None,
-                error=None,
-            )
-            logger.info("[%s] Video ready: %s", script_name, video_path)
         except CodeValidationError as exc:
             self._fail(script_name, "code_validation_failed", str(exc))
         except Exception as exc:
@@ -174,6 +195,7 @@ class RenderJobManager:
                 traceback.format_exc(),
             )
             self._fail(script_name, "render_failed", str(exc))
+
 
     def _render_failure_details(
         self,
@@ -235,6 +257,7 @@ class RenderJobManager:
                             error=None,
                         )
                     else:
+                        # 服务重启job没有状态，渲染进程必然被打断了
                         self._fail(
                             script_name,
                             "server_restarted",
