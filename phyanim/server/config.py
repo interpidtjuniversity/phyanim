@@ -37,7 +37,7 @@ class LLMProvider(str, Enum):
 
 # Preset model names for each provider.
 _PROVIDER_MODELS = {
-    LLMProvider.DEEPSEEK: "deepseek-v4-pro",
+    LLMProvider.DEEPSEEK: "deepseek-flash",
     LLMProvider.DOUBAO: "Doubao-Seed-2.0-pro",
 }
 

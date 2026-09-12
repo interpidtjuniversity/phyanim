@@ -136,4 +136,4 @@ if __name__ == "__main__":
     main()
 
 
-# python server.py --root_dir "E:\media_base" --llm_provider "deepseek" --llm_api_key "sk-f8c6f711dfa4485f890eec5f69b49c20" --llm_model "deepseek-v4-pro" --llm_base_url "https://api.deepseek.com" --tts_provider "minimax" --tts_api_key "sk-api-3Zu_GYQdFjIoXCXFHGLwcjXL7sUOQGSiAAmbTns5cLpa36Xk9-F1fdezpn9hAwWEDFiLFlsMnavkbh-_GL5oJHOd8zhmtbIgm7dcNhi2keybZ5OtJ0XAOF4"
+# python server.py --root_dir "E:\media_base" --llm_provider "deepseek" --llm_api_key "sk-f8c6f711dfa4485f890eec5f69b49c20" --llm_model "deepseek-flash" --llm_base_url "https://api.deepseek.com" --tts_provider "minimax" --tts_api_key "sk-api-3Zu_GYQdFjIoXCXFHGLwcjXL7sUOQGSiAAmbTns5cLpa36Xk9-F1fdezpn9hAwWEDFiLFlsMnavkbh-_GL5oJHOd8zhmtbIgm7dcNhi2keybZ5OtJ0XAOF4"
